@@ -1,0 +1,52 @@
+name: Deploy Node.js Application
+
+on:
+  push:
+    branches:
+      - release
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Build
+      run: npm run build
+
+    - name: Deploy to server
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        SERVER_IP: ${{ secrets.SERVER_IP }}
+        SERVER_USER: ${{ secrets.SERVER_USER }}
+      run: |
+        # Save SSH private key
+        mkdir -p ~/.ssh
+        echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+
+        # Add server to known_hosts to avoid verification issues
+        ssh-keyscan -H $SERVER_IP >> ~/.ssh/known_hosts
+
+        # Deploy using rsync and SSH
+        rsync -avz --delete ./ $SERVER_USER@$SERVER_IP:/var/www/kmp-bn/ || { echo 'rsync failed'; exit 1; }
+        ssh $SERVER_USER@$SERVER_IP << 'EOF'
+          cd /var/www/kmp-bn/
+          export PATH=/root/.nvm/versions/node/v20.16.0/bin:$PATH
+          npm ci || { echo 'npm ci failed'; exit 1; }
+          # npm run start || { echo 'npm start failed'; exit 1; }
+          # Optionally use PM2 or another process manager
+          pm2 start npm --name "kmp-bn" -- start || { echo 'pm2 start failed'; exit 1; }
+          pm2 save
+          pm2 startup
+        EOF

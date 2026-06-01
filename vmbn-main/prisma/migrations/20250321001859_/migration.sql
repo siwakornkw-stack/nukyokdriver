@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "IncomeVehicle" ADD COLUMN     "CustomerName" TEXT,
+ADD COLUMN     "ReceiveDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;

@@ -1,0 +1,22 @@
+# dependencies
+node_modules/
+
+# secrets / env (matches nested .env in every subfolder; .env.example is kept)
+.env
+.env.local
+.env*.local
+
+# build output
+.next/
+dist/
+build/
+out/
+
+# vercel
+.vercel
+
+# misc
+.DS_Store
+*.log
+.eslintcache
+*.tsbuildinfo

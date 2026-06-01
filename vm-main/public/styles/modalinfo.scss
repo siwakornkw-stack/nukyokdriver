@@ -1,0 +1,66 @@
+.modal-info-group {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  flex-direction: row;
+  flex-wrap: wrap;
+  width: 100%;
+  margin: 20px 0;
+  gap: 10px;
+  column-gap: 24px;
+  .modal-info-image-box {
+    position: static;
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    max-width: 400px;
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .image-overlay {      
+      display: flex; 
+      justify-content: center; 
+      align-items: center; 
+      width: 100%; 
+      height: 100%; 
+      position: absolute; 
+      top: 0; 
+      left: 0;
+      background-color: rgba(0, 0, 0, 0.5);
+      opacity: 0;
+      transition: opacity 0.3s;
+      cursor: pointer;
+    }
+    &:hover {
+      .image-overlay {
+          opacity: 1;
+      }
+    }
+  }
+  .modal-info-data-group {
+    width: 100%;
+  }
+  .modal-info-data-text-group {
+    width: 100%;
+    display: flex;
+    justify-content: flex-start;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 10px;
+    .label-text {
+      min-width: 60px;
+    }
+  }
+  .modal-info-data-text-group-box-2 {
+    flex: 1 1 10%;
+    width: 100%;
+    display: flex;
+    justify-content: flex-start;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+}

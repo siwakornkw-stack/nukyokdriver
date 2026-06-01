@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "LineWebhook" ALTER COLUMN "Body" SET DATA TYPE TEXT;

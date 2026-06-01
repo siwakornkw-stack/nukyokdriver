@@ -1,0 +1,142 @@
+'use client';
+
+import * as React from 'react';
+import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import CardHeader from '@mui/material/CardHeader';
+import Chip from '@mui/material/Chip';
+import Divider from '@mui/material/Divider';
+import Stack from '@mui/material/Stack';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
+
+import { importAuto, type ImportSheetResult } from '../../../../services/import-data.service';
+
+const TYPE_LABEL: Record<string, string> = {
+  vehicles: 'รถ', jobs: 'งาน', repair: 'ซ่อม', accident: 'อุบัติเหตุ',
+  fuel: 'ค่าน้ำมัน', oil: 'เปลี่ยนน้ำมัน', installment: 'ค่างวด', income: 'รายได้', unknown: 'ไม่รู้จัก',
+};
+
+export default function PageImport(): React.JSX.Element {
+  const [file, setFile] = React.useState<File | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [message, setMessage] = React.useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [results, setResults] = React.useState<ImportSheetResult[]>([]);
+
+  const handleUpload = async (): Promise<void> => {
+    if (!file) {
+      setMessage({ type: 'error', text: 'กรุณาเลือกไฟล์ก่อน' });
+      return;
+    }
+    setLoading(true);
+    setResults([]);
+    try {
+      const res = await importAuto(file);
+      setResults(res.results ?? []);
+      setMessage({ type: res.success ? 'success' : 'error', text: res.message ?? 'เสร็จสิ้น' });
+    } catch (e) {
+      setMessage({ type: 'error', text: 'อัปโหลดไม่สำเร็จ' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Stack spacing={3}>
+      <Typography variant="h4">นำเข้าข้อมูล (Excel / CSV)</Typography>
+
+      {message ? (
+        <Alert severity={message.type} onClose={() => setMessage(null)}>
+          {message.text}
+        </Alert>
+      ) : null}
+
+      <Card>
+        <CardHeader
+          title="โยนไฟล์ข้อมูลดิบ"
+          subheader="รองรับ .xlsx (หลาย sheet) / .csv / .json — AI จะตรวจว่าแต่ละ sheet เป็นรถ/งาน/ซ่อม/อุบัติเหตุ/ค่าน้ำมัน/เปลี่ยนน้ำมัน/ค่างวด/รายได้/ประกัน แล้วนำเข้าให้อัตโนมัติ"
+        />
+        <Divider />
+        <CardContent>
+          <Stack spacing={2} direction={{ xs: 'column', sm: 'row' }} alignItems="center">
+            <Button variant="outlined" component="label">
+              เลือกไฟล์
+              <input
+                hidden
+                type="file"
+                accept=".xlsx,.xls,.csv,.json"
+                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              />
+            </Button>
+            <Typography variant="body2" color="text.secondary">
+              {file ? file.name : 'ยังไม่ได้เลือกไฟล์'}
+            </Typography>
+            <Box sx={{ flexGrow: 1 }} />
+            <Button variant="contained" disabled={!file || loading} onClick={() => void handleUpload()}>
+              {loading ? 'กำลังนำเข้า...' : 'นำเข้าข้อมูล'}
+            </Button>
+          </Stack>
+        </CardContent>
+      </Card>
+
+      {results.length > 0 ? (
+        <Card>
+          <CardHeader title="ผลการนำเข้า" />
+          <Divider />
+          <Box sx={{ overflowX: 'auto' }}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Sheet</TableCell>
+                  <TableCell>ชนิด</TableCell>
+                  <TableCell align="right">เพิ่มใหม่</TableCell>
+                  <TableCell align="right">อัปเดต</TableCell>
+                  <TableCell align="right">ประกัน/พรบ/ภาษี</TableCell>
+                  <TableCell align="right">ข้าม</TableCell>
+                  <TableCell>ข้อผิดพลาด</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {results.map((r) => (
+                  <TableRow key={r.sheet}>
+                    <TableCell>{r.sheet}</TableCell>
+                    <TableCell>
+                      <Chip
+                        size="small"
+                        label={TYPE_LABEL[r.type] ?? r.type}
+                        color={r.type === 'unknown' ? 'default' : 'primary'}
+                      />
+                    </TableCell>
+                    <TableCell align="right">{r.created}</TableCell>
+                    <TableCell align="right">{r.updated}</TableCell>
+                    <TableCell align="right">{r.sub}</TableCell>
+                    <TableCell align="right">{r.skipped}</TableCell>
+                    <TableCell>
+                      {r.errors.length === 0 ? (
+                        <Typography variant="caption" color="text.secondary">—</Typography>
+                      ) : (
+                        r.errors.slice(0, 5).map((err, i) => (
+                          <Typography key={i} variant="caption" display="block" color="error">{err}</Typography>
+                        ))
+                      )}
+                      {r.errors.length > 5 ? (
+                        <Typography variant="caption" color="text.secondary">…และอีก {r.errors.length - 5} รายการ</Typography>
+                      ) : null}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Box>
+        </Card>
+      ) : null}
+    </Stack>
+  );
+}

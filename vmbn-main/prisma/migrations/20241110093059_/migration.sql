@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "CompulsoryMotorInsuranceVehicle" ADD COLUMN     "CreatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ADD COLUMN     "CreatedByUsername" TEXT,
+ADD COLUMN     "UpdatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ADD COLUMN     "UpdatedByUsername" TEXT;

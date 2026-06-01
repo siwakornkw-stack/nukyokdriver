@@ -1,0 +1,158 @@
+/* @ Custom Swal */
+:root{
+	--swal-bg-color: #fff;
+	--swal-mask: #fff;
+	--swal-mask-composite: #fff;
+}
+.swal-backdrop {
+	position: fixed;
+	width: 100vw;
+	height: 100vh;
+	top: 0;
+	left: 0;
+	background-color: rgba(149, 145, 145, 0);
+	backdrop-filter: blur(15px);
+	-webkit-backdrop-filter: blur(15px);
+	z-index: 1110;
+	opacity: 0;
+	transition: opacity 0.3s ease-out;
+	display: none;
+
+	&.show {
+		display: block;
+		opacity: 1;
+	}
+
+	&.hide {
+		opacity: 0;
+	}
+}
+
+.swal-modal {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100vw;
+	height: 100vh;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 1111;
+
+	&.d-none {
+		display: none;
+	}
+}
+
+.animate__bounceIn {
+	animation-duration: 0.3s;
+}
+
+.animate__bounceOut {
+	animation-duration: 0.3s;
+}
+
+.d-none {
+	display: none !important;
+}
+
+.swal-wrapper {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	border-radius: 20px;
+	padding: 20px;
+	background: var(--swal-bg-color);
+	min-width: 490px;
+	max-width: 100%;
+	isolation: isolate;
+	overflow-y: auto;
+	overflow-x: hidden;
+	height: auto;
+	max-height: calc(100vh - 40px);
+}
+.swal-wrapper::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	z-index: -1;
+	backdrop-filter: blur(35px);
+	-webkit-backdrop-filter: blur(35px);
+}
+.swal-wrapper::before {
+	width: 100%;
+	height: 100%;
+	content: ' ';
+	position: absolute;
+	z-index: -1;
+	inset: 0;
+	padding: var(--swal-border-width);
+	border-radius: inherit;
+	background: var(--swal-mask);
+	-webkit-mask: var(--swal-mask-composite);
+	mask: var(--swal-mask-composite);
+	-webkit-mask-composite: xor;
+	mask-composite: exclude;
+}
+
+.swal-title {
+	font-size: 20px;
+	font-weight: 700;
+	line-height: 32px;
+	margin-bottom: 15px;
+}
+
+.swal-text {
+	font-size: 14px;
+	font-weight: 500;
+	line-height: 22px;
+	margin-bottom: 20px;
+}
+
+.swal-icon {
+	margin-bottom: 15px;
+}
+
+.swal-btn-wrapper {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+}
+
+.swal-btn {
+	width: 180px;
+	box-shadow: none;
+}
+
+.custom-swal {
+	backdrop-filter: blur(5px);
+	-webkit-backdrop-filter: blur(5px);
+}
+
+// Swal alert
+div:where(.swal2-container).swal2-center>.swal2-popup {
+	position: relative;
+	backdrop-filter: blur(10px);
+	-webkit-backdrop-filter: blur(10px);
+	border-radius: 20px;
+	color: var(--box-color);
+	background: var(--box-bg-color);
+	border: 1px solid transparent;
+
+}
+
+h2#swal2-title {
+	color: var(--primary-color);
+}
+
+button.swal2-confirm.swal2-styled {
+	border-radius: 30px;
+	width: 100%;
+	background: var(--btn-bg-color);
+}
+
+.swal2-container.swal2-center.swal2-backdrop-show .swal2-actions {
+	width: 100%;
+}

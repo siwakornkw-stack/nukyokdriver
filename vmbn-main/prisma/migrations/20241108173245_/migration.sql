@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Vehicle" ALTER COLUMN "Age" SET DATA TYPE TEXT;
