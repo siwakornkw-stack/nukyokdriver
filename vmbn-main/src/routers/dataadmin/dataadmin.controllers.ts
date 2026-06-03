@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express'
 import { IGetUserAuthInfoRequest } from '../../typings/express'
 import { ParsedToken } from '../../typings/token'
-import { listRecords, previewCount, deleteRecords, isDataType, dataTypeList, type Filter } from './dataadmin.services'
+import { listRecords, previewCount, deleteRecords, isDataType, dataTypeList, listVehicles, previewVehicleDelete, deleteVehicles, type Filter } from './dataadmin.services'
 
 const auth = (req: IGetUserAuthInfoRequest): ParsedToken => {
   const t = req.parsedToken
@@ -43,5 +43,29 @@ export async function remove(req: IGetUserAuthInfoRequest, res: Response, next: 
     if (!isDataType(type)) return res.status(400).json({ success: false, message: 'ชนิดข้อมูลไม่ถูกต้อง' })
     const deleted = await deleteRecords(type, t.tenantId, { ids: req.body.ids, filter: req.body.filter, allowAll: req.body.allowAll })
     res.json({ success: true, deleted, message: `ลบ ${deleted} รายการ` })
+  } catch (e) { next(e) }
+}
+
+export async function vehicleList(req: IGetUserAuthInfoRequest, res: Response, next: NextFunction) {
+  try {
+    const t = auth(req)
+    const { rows, total } = await listVehicles(t.tenantId, req.query.search as string)
+    res.json({ success: true, rows, total })
+  } catch (e) { next(e) }
+}
+
+export async function vehiclePreview(req: IGetUserAuthInfoRequest, res: Response, next: NextFunction) {
+  try {
+    const t = auth(req)
+    const r = await previewVehicleDelete(t.tenantId, req.body.ids ?? [])
+    res.json({ success: true, ...r })
+  } catch (e) { next(e) }
+}
+
+export async function vehicleRemove(req: IGetUserAuthInfoRequest, res: Response, next: NextFunction) {
+  try {
+    const t = auth(req)
+    const r = await deleteVehicles(t.tenantId, req.body.ids ?? [])
+    res.json({ success: true, ...r, message: `ลบรถ ${r.vehicles} คัน และข้อมูลที่เกี่ยวข้อง ${r.children} รายการ` })
   } catch (e) { next(e) }
 }

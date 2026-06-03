@@ -1,0 +1,1 @@
+ALTER TABLE "GasolineCost" ADD COLUMN IF NOT EXISTS "TaxInvoiceNumber" VARCHAR(100);

@@ -498,6 +498,7 @@ model GasolineCost {
   GasolineCostId String @id @default(uuid()) @db.VarChar(36)
   Status String @db.VarChar(15)
   Item String
+  TaxInvoiceNumber String? @db.VarChar(100)
   Liters Int
   Amount Decimal @db.Decimal(10,2)
   OdometerStart Int

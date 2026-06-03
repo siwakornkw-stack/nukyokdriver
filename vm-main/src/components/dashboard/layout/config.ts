@@ -7,7 +7,7 @@ export const navItems = [
   { key: 'driver', title: 'จัดการคนขับ', href: paths.dashboard.driver, icon: 'id-card', roles: ['admin', 'staff'] },
   { key: 'driver-jobs', title: 'สั่งงานคนขับ', href: paths.dashboard.driverJobs, icon: 'truck' },
   { key: 'import', title: 'นำเข้าข้อมูล', href: paths.dashboard.importData, icon: 'upload' },
-  //{ key: 'integrations', title: 'รายงานสรุป', href: '', icon: 'plugs-connected' },/* paths.dashboard.integrations */
+  { key: 'report', title: 'รายงานสรุป', href: paths.dashboard.report, icon: 'plugs-connected' },
   { key: 'settings', title: 'ตั้งค่า', href: paths.dashboard.settings, icon: 'gear-six' },
   { key: 'admin', title: 'ระบบจัดการผู้ใช้งาน', href: paths.dashboard.admin, icon: 'user-gear', roles: ['admin'] },
   { key: 'data-admin', title: 'จัดการ/ลบข้อมูล', href: paths.dashboard.dataAdmin, icon: 'trash', roles: ['admin'] },

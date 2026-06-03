@@ -17,7 +17,7 @@ import { getDashboard } from '../../../../services/dashboard.service';
 import type { DashboardResponse } from '@/types/dashboard';
 import { getResponseData, type WrapResponse } from '../../../../types/utils';
 import { useEffect, useState } from 'react';
-import { formatMoney } from '@/helpers/helper';
+import { numberFormat } from '@/helpers/helper';
 import { getVehicleAll } from '../../../../services/vehicle.service';
 import { VehicleAllResponse } from '@/types/vehicle';
 import ShareSweetAlert from '@/components/ShareSweetAlert';
@@ -272,14 +272,14 @@ export default function PageOverview(): React.JSX.Element {
 
       <Grid container spacing={3}>
         <Grid lg={3} sm={6} xs={12}>
-          <Income helpText="รายได้รวมในช่วงเวลาที่เลือก" loading={isDashboardLoading} diff={timeRangeData?.incomeDiff ?? 0} trend={timeRangeData?.incomeTrend ?? 'up'} sx={{ height: '100%' }} value={`฿${formatMoney(timeRangeData?.income ?? 0)}`} subValue={compareLabel} />
+          <Income helpText="รายได้รวมในช่วงเวลาที่เลือก" loading={isDashboardLoading} diff={timeRangeData?.incomeDiff ?? 0} trend={timeRangeData?.incomeTrend ?? 'up'} sx={{ height: '100%' }} value={`฿${numberFormat(timeRangeData?.income ?? 0)}`} subValue={compareLabel} />
         </Grid>
         <Grid lg={3} sm={6} xs={12}>
           <TotalProfit helpText="กำไรสุทธิ = รายได้ - ค่าใช้จ่าย" loading={isDashboardLoading} sx={{ height: '100%' }}
-            value={timeRangeData?.profit ? `฿${formatMoney(timeRangeData.profit)}` : '฿0'} />
+            value={timeRangeData?.profit ? `฿${numberFormat(timeRangeData.profit)}` : '฿0'} />
         </Grid>
         <Grid lg={3} sm={6} xs={12}>
-          <Budget helpText="ค่าใช้จ่ายรวมในช่วงเวลาที่เลือก" loading={isDashboardLoading} diff={timeRangeData?.outgoingsDiff ?? 0} trend={timeRangeData?.outgoingsTrend ?? 'up'} sx={{ height: '100%' }} value={`฿${formatMoney(timeRangeData?.outgoings ?? 0)}`} subValue={compareLabel} />
+          <Budget helpText="ค่าใช้จ่ายรวมในช่วงเวลาที่เลือก" loading={isDashboardLoading} diff={timeRangeData?.outgoingsDiff ?? 0} trend={timeRangeData?.outgoingsTrend ?? 'up'} sx={{ height: '100%' }} value={`฿${numberFormat(timeRangeData?.outgoings ?? 0)}`} subValue={compareLabel} />
         </Grid>
         <Grid lg={3} sm={6} xs={12}>
           <TasksProgress helpText="สัดส่วนรายได้เทียบเป้าหมาย" loading={isDashboardLoading} sx={{ height: '100%' }} value={timeRangeData?.incomePercentage ?? 0} />

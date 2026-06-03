@@ -41,7 +41,8 @@ export async function getDashboardController(req: IGetUserAuthInfoRequest, res: 
     const currentYear = new Date().getFullYear();
     const lastYear = currentYear - 1;
     const currentMonth = new Date().getMonth() + 1;
-    const lastMonth = currentMonth - 1;
+    const lastMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+    const lastMonthYear = currentMonth === 1 ? lastYear : currentYear;
     const currentDate = new Date();
     const startOfYear = new Date(currentDate.getFullYear(), 0, 1);
     const currentWeek = Math.ceil(((currentDate.getTime() - startOfYear.getTime()) / 86400000 + startOfYear.getDay() + 1) / 7);
@@ -50,7 +51,7 @@ export async function getDashboardController(req: IGetUserAuthInfoRequest, res: 
     const currentYearData = await getMonthlyIncomeForYear(tenantId, currentYear);
     const lastYearData = await getMonthlyIncomeForYear(tenantId, lastYear);
     const currentMonthData = await getWeeklyIncomeForMonth(tenantId, currentYear, currentMonth);
-    const lastMonthData = await getWeeklyIncomeForMonth(tenantId, lastYear, lastMonth);
+    const lastMonthData = await getWeeklyIncomeForMonth(tenantId, lastMonthYear, lastMonth);
     const currentWeekData = await getDailyIncomeForWeek(tenantId, currentYear, currentWeek);
     const lastWeekData = await getDailyIncomeForWeek(tenantId, lastYear, lastWeek);
 
@@ -201,6 +202,8 @@ export async function getSummaryFromDateRange(req: IGetUserAuthInfoRequest, res:
         message: 'รูปแบบวันที่ไม่ถูกต้อง'
       })
     }
+
+    end.setHours(23, 59, 59, 999)
 
     const income = await getIncomeVehicleFromDateRange(tenantId, start, end)
     const gasolineCost = await getGasolineCostFromDateRange(tenantId, start, end)

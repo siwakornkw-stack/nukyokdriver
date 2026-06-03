@@ -3,23 +3,25 @@ import { db } from '../../utils/db.server'
 import type { Customer, Prisma, Vehicle } from '@prisma/client'
 import type { CreateVehicleDTO, VehicleModelResponse } from '../../typings/vehicle'
 import { create } from 'node:domain'
+// NOTE: income/gasoline dashboard filters use "DateTime" (actual transaction date),
+// not the row insert date, so imported historical data lands in the correct period.
 
 export async function getIncomeVehicle(tenantId: string) {
-    return await db.incomeVehicle.findMany({ where: { Vehicle: { TenantId: tenantId } } })
+    return await db.incomeVehicle.findMany({ where: { Status: 'active', Vehicle: { TenantId: tenantId } } })
 }
 
 export async function getIncomeVehicleThisYear(tenantId: string) {
     const today = new Date()
     const startOfYear = new Date(today.getFullYear(), 0, 1)
     const endOfYear = new Date(today.getFullYear(), 11, 31)
-    return await db.incomeVehicle.findMany({ where: { Vehicle: { TenantId: tenantId }, CreatedAt: { gte: startOfYear, lte: endOfYear } } })
+    return await db.incomeVehicle.findMany({ where: { Status: 'active', Vehicle: { TenantId: tenantId }, DateTime: { gte: startOfYear, lte: endOfYear } } })
 }
 
 export async function getIncomeVehicleThisMonth(tenantId: string) {
     const today = new Date()
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0)
-    return await db.incomeVehicle.findMany({ where: { Vehicle: { TenantId: tenantId }, CreatedAt: { gte: startOfMonth, lte: endOfMonth } } })
+    return await db.incomeVehicle.findMany({ where: { Status: 'active', Vehicle: { TenantId: tenantId }, DateTime: { gte: startOfMonth, lte: endOfMonth } } })
 }
 export async function getIncomeVehicleThisWeek(tenantId: string) {
   const today = new Date()
@@ -33,7 +35,7 @@ export async function getIncomeVehicleThisWeek(tenantId: string) {
   endOfWeek.setDate(today.getDate() + (6 - today.getDay()))
   endOfWeek.setHours(23, 59, 59, 999)
   
-  return await db.incomeVehicle.findMany({ where: { Vehicle: { TenantId: tenantId }, CreatedAt: { gte: startOfWeek, lte: endOfWeek } } })
+  return await db.incomeVehicle.findMany({ where: { Status: 'active', Vehicle: { TenantId: tenantId }, DateTime: { gte: startOfWeek, lte: endOfWeek } } })
 }
 
 export async function getIncomeVehicleThisDay(tenantId: string) {
@@ -46,7 +48,7 @@ export async function getIncomeVehicleThisDay(tenantId: string) {
   const endOfDay = new Date(today)
   endOfDay.setHours(23, 59, 59, 999)
   
-  return await db.incomeVehicle.findMany({ where: { Vehicle: { TenantId: tenantId }, CreatedAt: { gte: startOfDay, lte: endOfDay } } })
+  return await db.incomeVehicle.findMany({ where: { Status: 'active', Vehicle: { TenantId: tenantId }, DateTime: { gte: startOfDay, lte: endOfDay } } })
 }
 
 export async function getGasolineCostThisYear(tenantId: string) {
@@ -55,8 +57,8 @@ export async function getGasolineCostThisYear(tenantId: string) {
   const endOfYear = new Date(today.getFullYear(), 11, 31)
   return await db.gasolineCost.findMany({ 
       where: { 
-          Vehicle: { TenantId: tenantId },
-          CreatedAt: { 
+          Status: 'active', Vehicle: { TenantId: tenantId },
+          DateTime: { 
               gte: startOfYear, 
               lte: endOfYear 
           } 
@@ -67,7 +69,7 @@ export async function getGasolineCostThisMonth(tenantId: string) {
     const today = new Date()
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0)
-    return await db.gasolineCost.findMany({ where: { Vehicle: { TenantId: tenantId }, CreatedAt: { gte: startOfMonth, lte: endOfMonth } } })
+    return await db.gasolineCost.findMany({ where: { Status: 'active', Vehicle: { TenantId: tenantId }, DateTime: { gte: startOfMonth, lte: endOfMonth } } })
 }
 export async function getGasolineCostThisWeek(tenantId: string) {
   const today = new Date()
@@ -82,7 +84,7 @@ export async function getGasolineCostThisWeek(tenantId: string) {
   endOfWeek.setHours(23, 59, 59, 999)
   
   return await db.gasolineCost.findMany({ 
-      where: { Vehicle: { TenantId: tenantId }, CreatedAt: { gte: startOfWeek, lte: endOfWeek } } 
+      where: { Status: 'active', Vehicle: { TenantId: tenantId }, DateTime: { gte: startOfWeek, lte: endOfWeek } } 
   })
 }
 
@@ -97,7 +99,7 @@ export async function getGasolineCostThisDay(tenantId: string) {
   endOfDay.setHours(23, 59, 59, 999)
   
   return await db.gasolineCost.findMany({ 
-      where: { Vehicle: { TenantId: tenantId }, CreatedAt: { gte: startOfDay, lte: endOfDay } } 
+      where: { Status: 'active', Vehicle: { TenantId: tenantId }, DateTime: { gte: startOfDay, lte: endOfDay } } 
   })
 }
 
@@ -105,7 +107,7 @@ export async function getGasolineCostLastYear(tenantId: string) {
   const today = new Date()
   const startOfYear = new Date(today.getFullYear() - 1, 0, 1)
   const endOfYear = new Date(today.getFullYear() - 1, 11, 31)
-  return await db.gasolineCost.findMany({ where: { Vehicle: { TenantId: tenantId }, CreatedAt: { gte: startOfYear, lte: endOfYear } } })
+  return await db.gasolineCost.findMany({ where: { Status: 'active', Vehicle: { TenantId: tenantId }, DateTime: { gte: startOfYear, lte: endOfYear } } })
 }
 
 
@@ -115,7 +117,7 @@ export async function getRepairVehicleThisYear(tenantId: string) {
   const endOfYear = new Date(today.getFullYear(), 11, 31)
   return await db.repairVehicle.findMany({ 
       where: { 
-          Vehicle: { TenantId: tenantId },
+          Status: 'active', Vehicle: { TenantId: tenantId },
           ReceiveDate: { 
               gte: startOfYear, 
               lte: endOfYear 
@@ -127,7 +129,7 @@ export async function getRepairVehicleThisMonth(tenantId: string) {
     const today = new Date()
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0)
-    return await db.repairVehicle.findMany({ where: { Vehicle: { TenantId: tenantId }, ReceiveDate: { gte: startOfMonth, lte: endOfMonth } } })
+    return await db.repairVehicle.findMany({ where: { Status: 'active', Vehicle: { TenantId: tenantId }, ReceiveDate: { gte: startOfMonth, lte: endOfMonth } } })
 }
 export async function getRepairVehicleThisWeek(tenantId: string) {
   const today = new Date()
@@ -142,7 +144,7 @@ export async function getRepairVehicleThisWeek(tenantId: string) {
   endOfWeek.setHours(23, 59, 59, 999)
   
   return await db.repairVehicle.findMany({ 
-      where: { Vehicle: { TenantId: tenantId }, ReceiveDate: { gte: startOfWeek, lte: endOfWeek } } 
+      where: { Status: 'active', Vehicle: { TenantId: tenantId }, ReceiveDate: { gte: startOfWeek, lte: endOfWeek } } 
   })
 }
 
@@ -157,7 +159,7 @@ export async function getRepairVehicleThisDay(tenantId: string) {
   endOfDay.setHours(23, 59, 59, 999)
   
   return await db.repairVehicle.findMany({ 
-      where: { Vehicle: { TenantId: tenantId }, ReceiveDate: { gte: startOfDay, lte: endOfDay } } 
+      where: { Status: 'active', Vehicle: { TenantId: tenantId }, ReceiveDate: { gte: startOfDay, lte: endOfDay } } 
   })
 }
 
@@ -165,7 +167,7 @@ export async function getRepairVehicleLastYear(tenantId: string) {
   const today = new Date()
   const startOfYear = new Date(today.getFullYear() - 1, 0, 1)
   const endOfYear = new Date(today.getFullYear() - 1, 11, 31)
-  return await db.repairVehicle.findMany({ where: { Vehicle: { TenantId: tenantId }, ReceiveDate: { gte: startOfYear, lte: endOfYear } } })
+  return await db.repairVehicle.findMany({ where: { Status: 'active', Vehicle: { TenantId: tenantId }, ReceiveDate: { gte: startOfYear, lte: endOfYear } } })
 }
 
 
@@ -173,7 +175,7 @@ export async function getIncomeVehicleLastMonth(tenantId: string) {
     const today = new Date()
     const startOfMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1)
     const endOfMonth = new Date(today.getFullYear(), today.getMonth(), 0)
-    return await db.incomeVehicle.findMany({ where: { Vehicle: { TenantId: tenantId }, CreatedAt: { gte: startOfMonth, lte: endOfMonth } } })
+    return await db.incomeVehicle.findMany({ where: { Status: 'active', Vehicle: { TenantId: tenantId }, DateTime: { gte: startOfMonth, lte: endOfMonth } } })
 }
 export async function getIncomeVehicleLastWeek(tenantId: string) {
   const today = new Date()
@@ -188,7 +190,7 @@ export async function getIncomeVehicleLastWeek(tenantId: string) {
   endOfLastWeek.setHours(23, 59, 59, 999)
   
   return await db.incomeVehicle.findMany({ 
-      where: { Vehicle: { TenantId: tenantId }, CreatedAt: { gte: startOfLastWeek, lte: endOfLastWeek } } 
+      where: { Status: 'active', Vehicle: { TenantId: tenantId }, DateTime: { gte: startOfLastWeek, lte: endOfLastWeek } } 
   })
 }
 
@@ -196,7 +198,7 @@ export async function getIncomeVehicleLastYear(tenantId: string) {
     const today = new Date()
     const startOfYear = new Date(today.getFullYear() - 1, 0, 1)
     const endOfYear = new Date(today.getFullYear() - 1, 11, 31)
-    return await db.incomeVehicle.findMany({ where: { Vehicle: { TenantId: tenantId }, CreatedAt: { gte: startOfYear, lte: endOfYear } } })
+    return await db.incomeVehicle.findMany({ where: { Status: 'active', Vehicle: { TenantId: tenantId }, DateTime: { gte: startOfYear, lte: endOfYear } } })
 }
 
 export async function getIncomeVehicleLastDay(tenantId: string) {
@@ -212,7 +214,7 @@ export async function getIncomeVehicleLastDay(tenantId: string) {
   endOfYesterday.setHours(23, 59, 59, 999)
   
   return await db.incomeVehicle.findMany({ 
-      where: { Vehicle: { TenantId: tenantId }, CreatedAt: { gte: startOfYesterday, lte: endOfYesterday } } 
+      where: { Status: 'active', Vehicle: { TenantId: tenantId }, DateTime: { gte: startOfYesterday, lte: endOfYesterday } } 
   })
 }
 
@@ -220,7 +222,7 @@ export async function getOutgoingsLastMonth(tenantId: string) {
     const today = new Date()
     const startOfMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1)
     const endOfMonth = new Date(today.getFullYear(), today.getMonth(), 0)
-    return await db.gasolineCost.findMany({ where: { Vehicle: { TenantId: tenantId }, CreatedAt: { gte: startOfMonth, lte: endOfMonth } } })
+    return await db.gasolineCost.findMany({ where: { Status: 'active', Vehicle: { TenantId: tenantId }, DateTime: { gte: startOfMonth, lte: endOfMonth } } })
 }
 export async function getOutgoingsLastWeek(tenantId: string) {
   const today = new Date()
@@ -235,7 +237,7 @@ export async function getOutgoingsLastWeek(tenantId: string) {
   endOfLastWeek.setHours(23, 59, 59, 999)
   
   return await db.gasolineCost.findMany({ 
-      where: { Vehicle: { TenantId: tenantId }, CreatedAt: { gte: startOfLastWeek, lte: endOfLastWeek } } 
+      where: { Status: 'active', Vehicle: { TenantId: tenantId }, DateTime: { gte: startOfLastWeek, lte: endOfLastWeek } } 
   })
 }
 
@@ -252,7 +254,7 @@ export async function getOutgoingsLastDay(tenantId: string) {
   endOfYesterday.setHours(23, 59, 59, 999)
   
   return await db.gasolineCost.findMany({ 
-      where: { Vehicle: { TenantId: tenantId }, CreatedAt: { gte: startOfYesterday, lte: endOfYesterday } } 
+      where: { Status: 'active', Vehicle: { TenantId: tenantId }, DateTime: { gte: startOfYesterday, lte: endOfYesterday } } 
   })
 }
 
@@ -260,7 +262,7 @@ export async function getRepairVehicleLastMonth(tenantId: string) {
   const today = new Date()
   const startOfMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1)
   const endOfMonth = new Date(today.getFullYear(), today.getMonth(), 0)
-  return await db.repairVehicle.findMany({ where: { Vehicle: { TenantId: tenantId }, ReceiveDate: { gte: startOfMonth, lte: endOfMonth } } })
+  return await db.repairVehicle.findMany({ where: { Status: 'active', Vehicle: { TenantId: tenantId }, ReceiveDate: { gte: startOfMonth, lte: endOfMonth } } })
 }
 export async function getRepairVehicleLastWeek(tenantId: string) {
 const today = new Date()
@@ -275,7 +277,7 @@ endOfLastWeek.setDate(today.getDate() - today.getDay() - 1)
 endOfLastWeek.setHours(23, 59, 59, 999)
 
 return await db.repairVehicle.findMany({ 
-    where: { Vehicle: { TenantId: tenantId }, ReceiveDate: { gte: startOfLastWeek, lte: endOfLastWeek } } 
+    where: { Status: 'active', Vehicle: { TenantId: tenantId }, ReceiveDate: { gte: startOfLastWeek, lte: endOfLastWeek } } 
 })
 }
 
@@ -292,7 +294,7 @@ endOfYesterday.setDate(today.getDate() - 1)
 endOfYesterday.setHours(23, 59, 59, 999)
 
 return await db.repairVehicle.findMany({ 
-    where: { Vehicle: { TenantId: tenantId }, ReceiveDate: { gte: startOfYesterday, lte: endOfYesterday } } 
+    where: { Status: 'active', Vehicle: { TenantId: tenantId }, ReceiveDate: { gte: startOfYesterday, lte: endOfYesterday } } 
 })
 }
 
@@ -304,11 +306,11 @@ interface MonthlyData {
 export async function getMonthlyIncomeForYear(tenantId: string, year: number) {
     const monthlyData = await db.$queryRaw`
       SELECT 
-        EXTRACT(MONTH FROM "CreatedAt") as month,
+        EXTRACT(MONTH FROM "DateTime") as month,
         SUM("AmountReceive") as total
       FROM "IncomeVehicle"
-      WHERE EXTRACT(YEAR FROM "CreatedAt") = ${year} AND "VehicleId" IN (SELECT "VehicleId" FROM "Vehicle" WHERE "TenantId" = ${tenantId})
-      GROUP BY EXTRACT(MONTH FROM "CreatedAt")
+      WHERE "Status" = 'active' AND EXTRACT(YEAR FROM "DateTime") = ${year} AND "VehicleId" IN (SELECT "VehicleId" FROM "Vehicle" WHERE "TenantId" = ${tenantId})
+      GROUP BY EXTRACT(MONTH FROM "DateTime")
       ORDER BY month
     `;
   
@@ -331,14 +333,15 @@ export async function getWeeklyIncomeForMonth(tenantId: string, year: number, mo
   const weeklyData = await db.$queryRaw`
     WITH WeeklyRanges AS (
       SELECT 
-        date_trunc('week', "CreatedAt") as week_start,
+        date_trunc('week', "DateTime") as week_start,
         SUM("AmountReceive") as total
       FROM "IncomeVehicle"
-      WHERE 
-        EXTRACT(YEAR FROM "CreatedAt") = ${year} 
-        AND EXTRACT(MONTH FROM "CreatedAt") = ${month}
+      WHERE
+        "Status" = 'active'
+        AND EXTRACT(YEAR FROM "DateTime") = ${year}
+        AND EXTRACT(MONTH FROM "DateTime") = ${month}
         AND "VehicleId" IN (SELECT "VehicleId" FROM "Vehicle" WHERE "TenantId" = ${tenantId})
-      GROUP BY date_trunc('week', "CreatedAt")
+      GROUP BY date_trunc('week', "DateTime")
       ORDER BY week_start
     )
     SELECT 
@@ -367,14 +370,15 @@ export async function getDailyIncomeForWeek(tenantId: string, year: number, week
   const dailyData = await db.$queryRaw`
     WITH WeekDays AS (
       SELECT 
-        EXTRACT(DOW FROM "CreatedAt") as day_of_week,
+        EXTRACT(DOW FROM "DateTime") as day_of_week,
         SUM("AmountReceive") as total
       FROM "IncomeVehicle"
       WHERE 
-        date_trunc('week', "CreatedAt") = date_trunc('week', 
+        "Status" = 'active'
+        AND date_trunc('week', "DateTime") = date_trunc('week',
           to_date(${year.toString()} || '-01-01', 'YYYY-MM-DD') + ((${week - 1})::integer || ' weeks')::interval
         ) AND "VehicleId" IN (SELECT "VehicleId" FROM "Vehicle" WHERE "TenantId" = ${tenantId})
-      GROUP BY EXTRACT(DOW FROM "CreatedAt")
+      GROUP BY EXTRACT(DOW FROM "DateTime")
       ORDER BY day_of_week
     )
     SELECT * FROM WeekDays
@@ -392,7 +396,7 @@ export async function getDailyIncomeForWeek(tenantId: string, year: number, week
 
 export async function getIncomeVehicleFromDateRange(tenantId: string, start: Date, end: Date) {
   return await db.incomeVehicle.findMany({
-    where: { Vehicle: { TenantId: tenantId }, DateTime: { gte: start, lte: end } },
+    where: { Status: 'active', Vehicle: { TenantId: tenantId }, DateTime: { gte: start, lte: end } },
     include: {
       Vehicle: true
     }
@@ -400,7 +404,7 @@ export async function getIncomeVehicleFromDateRange(tenantId: string, start: Dat
 }
 
 export async function getGasolineCostFromDateRange(tenantId: string, start: Date, end: Date) {
-  return await db.gasolineCost.findMany({ where: { Vehicle: { TenantId: tenantId }, DateTime: { gte: start, lte: end } },
+  return await db.gasolineCost.findMany({ where: { Status: 'active', Vehicle: { TenantId: tenantId }, DateTime: { gte: start, lte: end } },
     include: {
       Vehicle: true
     }
@@ -408,7 +412,7 @@ export async function getGasolineCostFromDateRange(tenantId: string, start: Date
 }
 
 export async function getRepairVehicleFromDateRange(tenantId: string, start: Date, end: Date) {
-  return await db.repairVehicle.findMany({ where: { Vehicle: { TenantId: tenantId }, ReceiveDate: { gte: start, lte: end } },
+  return await db.repairVehicle.findMany({ where: { Status: 'active', Vehicle: { TenantId: tenantId }, ReceiveDate: { gte: start, lte: end } },
     include: {
       Vehicle: true
     }

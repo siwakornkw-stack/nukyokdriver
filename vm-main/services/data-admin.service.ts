@@ -43,3 +43,23 @@ export async function deleteData(type: DataType, body: { ids?: string[]; filter?
   const res = await fetch(`${urlApi}/data-admin/${type}/delete`, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
   return res.json();
 }
+
+export interface AdminVehicleRow { id: string; plate: string; model: string; status: string }
+
+export async function listVehicles(search?: string): Promise<{ rows: AdminVehicleRow[]; total: number }> {
+  const qs = search ? `?search=${encodeURIComponent(search)}` : '';
+  const res = await fetch(`${urlApi}/data-admin/vehicles${qs}`, { headers: headers() });
+  const json = await res.json();
+  return { rows: json.rows ?? [], total: json.total ?? 0 };
+}
+
+export async function previewVehicleDelete(ids: string[]): Promise<{ vehicles: number; children: number }> {
+  const res = await fetch(`${urlApi}/data-admin/vehicles/preview`, { method: 'POST', headers: headers(), body: JSON.stringify({ ids }) });
+  const json = await res.json();
+  return { vehicles: json.vehicles ?? 0, children: json.children ?? 0 };
+}
+
+export async function deleteVehicles(ids: string[]): Promise<{ success: boolean; vehicles: number; children: number; message: string }> {
+  const res = await fetch(`${urlApi}/data-admin/vehicles/delete`, { method: 'POST', headers: headers(), body: JSON.stringify({ ids }) });
+  return res.json();
+}

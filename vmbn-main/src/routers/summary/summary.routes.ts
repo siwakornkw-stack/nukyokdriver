@@ -16,4 +16,10 @@ router.get(
     SummaryController.getFuelSummary
 )
 
+router.get(
+    '/fuel-detail',
+    requireUser,
+    SummaryController.getFuelDetail
+)
+
 export default router 

@@ -18,7 +18,7 @@ async function runChunked<T>(items: T[], size: number, fn: (item: T) => Promise<
 // ---------- value parsers ----------
 const str = (v: any): string => (v === undefined || v === null ? '' : String(v).trim())
 const int0 = (v: any): number => { const n = parseInt(str(v).replace(/[^0-9.-]/g, ''), 10); return isNaN(n) ? 0 : n }
-const decOrZero = (v: any): Prisma.Decimal => { const s = str(v).replace(/[^0-9.]/g, ''); return s && !isNaN(parseFloat(s)) ? new Prisma.Decimal(s) : new Prisma.Decimal(0) }
+const decOrZero = (v: any): Prisma.Decimal => { const m = str(v).replace(/[^0-9.-]/g, '').match(/^-?\d*\.?\d+/); return m ? new Prisma.Decimal(m[0]) : new Prisma.Decimal(0) }
 
 // ---------- dedup key normalizers ----------
 // Stable string parts so a fetched DB row and a to-be-created record produce the
@@ -65,14 +65,14 @@ export function parseLicense(raw: string): { prefix: string; suffix: string; pro
 }
 
 // ---------- header synonym mapping ----------
-const norm = (s: any): string => str(s).toLowerCase().replace(/[\s.\-_/]/g, '')
+const norm = (s: any): string => str(s).toLowerCase().replace(/[\s.\-_/()（）]/g, '')
 
 const SYNONYMS: Record<string, string[]> = {
   // old English export keys still supported
   license: ['ทะเบียน', 'ป้ายทะเบียน', 'ทะเบียนรถ', 'เลขทะเบียน', 'licenseplate', 'licenseplateprefix'],
   licenseSuffix: ['licenseplatesuffix'],
   province: ['licenseplateprovince', 'จังหวัด'],
-  model: ['รายการทรัพย์สิน', 'รายการ', 'ชื่อรถ', 'ยี่ห้อรุ่น', 'รุ่น', 'model'],
+  model: ['รายการทรัพย์สิน', 'ชื่อรถ', 'ยี่ห้อรุ่น', 'รุ่น', 'model'],
   brand: ['ยี่ห้อ', 'brand'],
   driver: ['คนขับ', 'ชื่อคนขับ', 'ผู้ขับ', 'ผู้ขับขี่', 'ผู้ประจำรถ', 'ผู้ปฏิบัติงาน', 'ผู้ปฏิบัตงาน', 'driver'],
   vehicleType: ['ประเภทรถ', 'ประเภท', 'ชนิดรถ', 'vehicletype'],
@@ -87,7 +87,16 @@ const SYNONYMS: Record<string, string[]> = {
   brokerName: ['โบรกเกอร์', 'ชื่อโบรกเกอร์', 'broker', 'brokername'],
   premium: ['ค่าเบี้ย', 'เบี้ยประกัน', 'ค่าเบี้ยรวม', 'เบี้ยรวม', 'ค่าเบี้ยประกัน', 'totalpremium'],
   compulsoryEnd: ['พรบยาว', 'พรบ', 'พรบหมด', 'พ.ร.บ.'],
+  // Must precede taxEnd: "เลขที่ใบกำกับภาษี" contains "ภาษี" and would otherwise
+  // be captured as taxEnd. The tax-invoice number is the natural key that tells
+  // two same-day fuel fills apart, so it feeds the fuel dedup key.
+  taxInvoiceNumber: ['เลขที่ใบกำกับภาษี', 'ใบกำกับภาษี', 'เลขที่ใบกำกับ', 'เลขใบกำกับ'],
   taxEnd: ['ภาษีสั้น', 'ภาษี', 'ภาษีหมด'],
+  // odometer columns: matched before origin/destination so "เลขไมล์(ต้นทาง)/
+  // (ปลายทาง)" map to odometer instead of being mistaken for job origin/destination.
+  odometerStart: ['เลขไมล์เริ่ม', 'ไมล์เริ่ม', 'เลขไมล์เริ่มต้น', 'เลขไมล์ต้นทาง', 'ไมล์ต้นทาง'],
+  odometerEnd: ['เลขไมล์สิ้นสุด', 'ไมล์สิ้นสุด', 'เลขไมล์ปลายทาง', 'ไมล์ปลายทาง'],
+  odometer: ['เลขไมล์', 'ไมล์', 'odometer'],
   // job columns (driver dispatch via LINE)
   origin: ['เนื้อหางาน', 'เนื้องาน', 'ต้นทาง', 'จุดรับ', 'origin'],
   destination: ['จุดหมายปลายทาง', 'จุดหมาย', 'ปลายทาง', 'จุดส่ง', 'หน้างาน', 'แผนที่', 'googlemap', 'destination'],
@@ -103,11 +112,9 @@ const SYNONYMS: Record<string, string[]> = {
   party: ['คู่กรณี', 'จำนวนคู่กรณี'],
   opponent: ['ฝ่ายตรงข้าม', 'คู่กรณีฝ่ายตรงข้าม'],
   fuelItem: ['รายการน้ำมัน', 'ชนิดน้ำมัน', 'ประเภทน้ำมัน'],
+  fuelDate: ['วันเดือนปี'],
   liters: ['ลิตร', 'จำนวนลิตร'],
   amount: ['จำนวนเงิน', 'ยอดเงิน', 'amount'],
-  odometerStart: ['เลขไมล์เริ่ม', 'ไมล์เริ่ม', 'เลขไมล์เริ่มต้น'],
-  odometerEnd: ['เลขไมล์สิ้นสุด', 'ไมล์สิ้นสุด'],
-  odometer: ['เลขไมล์', 'ไมล์', 'odometer'],
   oilDate: ['วันที่เปลี่ยนน้ำมัน', 'วันเปลี่ยนน้ำมัน', 'วันถ่ายน้ำมัน'],
   oilDueDate: ['ครบกำหนดเปลี่ยน', 'รอบถัดไป'],
   textAlert: ['ข้อความแจ้งเตือน', 'ข้อความ'],
@@ -570,10 +577,10 @@ function importFuel(tenantId: string, username: string | undefined, sheetName: s
   return importCategory<Prisma.GasolineCostCreateManyInput>(tenantId, username, sheetName, rows, colMap, (row, vid) => {
     const d = dateOrNull(cell(row, colMap, 'fuelDate')) ?? dateOrNull(cell(row, colMap, 'scheduledAt'))
     if (!d) return null
-    return { VehicleId: vid, Status: 'active', Item: str(cell(row, colMap, 'fuelItem')), Liters: int0(cell(row, colMap, 'liters')), Amount: decOrZero(cell(row, colMap, 'amount')), OdometerStart: int0(cell(row, colMap, 'odometerStart')), OdometerEnd: int0(cell(row, colMap, 'odometerEnd')), DateTime: d, CreatedByUsername: username ?? 'import' }
+    return { VehicleId: vid, Status: 'active', Item: str(cell(row, colMap, 'fuelItem')), TaxInvoiceNumber: str(cell(row, colMap, 'taxInvoiceNumber')) || null, Liters: int0(cell(row, colMap, 'liters')), Amount: decOrZero(cell(row, colMap, 'amount')), OdometerStart: int0(cell(row, colMap, 'odometerStart')), OdometerEnd: int0(cell(row, colMap, 'odometerEnd')), DateTime: d, CreatedByUsername: username ?? 'import' }
   }, (data) => db.gasolineCost.createMany({ data }), {
-    keyOf: (r) => `${r.VehicleId}|${kdate(r.DateTime)}|${kdec(r.Amount)}|${r.Liters}|${r.OdometerStart}|${r.OdometerEnd}`,
-    load: (vids) => db.gasolineCost.findMany({ where: { VehicleId: { in: vids } }, select: { VehicleId: true, DateTime: true, Amount: true, Liters: true, OdometerStart: true, OdometerEnd: true } }),
+    keyOf: (r) => `${r.VehicleId}|${kdate(r.DateTime)}|${kdec(r.Amount)}|${r.Liters}|${r.OdometerStart}|${r.OdometerEnd}|${str(r.TaxInvoiceNumber)}`,
+    load: (vids) => db.gasolineCost.findMany({ where: { VehicleId: { in: vids } }, select: { VehicleId: true, DateTime: true, Amount: true, Liters: true, OdometerStart: true, OdometerEnd: true, TaxInvoiceNumber: true } }),
   })
 }
 function importOil(tenantId: string, username: string | undefined, sheetName: string, rows: any[][], colMap: Record<string, number>): Promise<CatResult> {
@@ -628,7 +635,20 @@ export function classify(colMap: Record<string, number>): SheetType {
 async function resolveMapping(sheetName: string, matrix: any[][]): Promise<{ type: SheetResult['type']; headerRow: number; colMap: Record<string, number>; via: string }> {
   const ai = await aiMapSheet(sheetName, matrix)
   if (ai && ai.type !== 'unknown' && Object.keys(ai.columns).length >= 1) {
-    return { type: ai.type, headerRow: ai.headerRow, colMap: ai.columns, via: 'ai' }
+    // Merge AI + heuristic mappings. The heuristic wins on conflicts: it matches
+    // curated Thai header synonyms exactly and is deterministic, whereas the AI is
+    // non-deterministic and occasionally mis-maps a column (e.g. mapping the amount
+    // column to liters/distance on one sheet, silently corrupting that sheet's totals).
+    // The AI only fills fields the heuristic could not classify, and supplies the type.
+    // Also prefer the heuristic's structurally-detected headerRow — the AI's is often
+    // off by one, which slices away the first data row of every sheet sharing that layout.
+    const det = detectHeader(matrix)
+    return {
+      type: ai.type,
+      headerRow: det ? det.headerRow : ai.headerRow,
+      colMap: { ...ai.columns, ...(det?.colMap ?? {}) },
+      via: 'ai',
+    }
   }
   const detected = detectHeader(matrix)
   if (!detected) return { type: 'unknown', headerRow: 0, colMap: {}, via: ai ? 'ai+heuristic' : 'heuristic' }
@@ -700,7 +720,12 @@ export async function importWorkbook(tenantId: string, username: string | undefi
       results.push({ sheet: name, type: 'unknown', created: 0, updated: 0, sub: 0, skipped: 0, errors: ['ไม่รู้จักรูปแบบคอลัมน์ (ข้าม)'] })
       continue
     }
-    const dataRows = matrix.slice(m.headerRow + 1)
+    // The mapping is shared across sheets with the same header layout (one AI
+    // call for all), but the header can sit on a different row per sheet — the
+    // fingerprint keys on header text, not position. Re-detect the header row
+    // for THIS sheet so we don't slice away its first data row.
+    const sheetHeaderRow = detectHeader(matrix)?.headerRow ?? m.headerRow
+    const dataRows = matrix.slice(sheetHeaderRow + 1)
     let r: CatResult
     if (m.type === 'vehicles') r = await importVehicles(tenantId, username, dataRows, m.colMap)
     else if (m.type === 'jobs') r = await importJobs(tenantId, username, dataRows, m.colMap)

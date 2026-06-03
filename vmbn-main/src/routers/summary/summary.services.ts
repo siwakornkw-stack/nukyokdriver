@@ -38,11 +38,13 @@ export async function getIncomeSummaryService(
 ): Promise<IncomeSummaryRow[]> {
   try {
     // สร้าง where condition สำหรับการกรองตามวันที่
-    const dateFilter: any = {}
+    const dateFilter: any = { Status: 'active' }
     if (startDate && endDate) {
+      const end = new Date(endDate)
+      end.setHours(23, 59, 59, 999)
       dateFilter.DateTime = {
         gte: new Date(startDate),
-        lte: new Date(endDate)
+        lte: end
       }
     }
 
@@ -100,6 +102,70 @@ export async function getIncomeSummaryService(
   }
 }
 
+export interface FuelDetailRow {
+  id: string
+  vehicleId: string
+  licensePlate: string
+  vehicleType: string
+  driverName: string
+  date: string
+  item: string
+  taxInvoiceNumber: string
+  liters: number
+  amount: number
+  odometerStart: number
+  odometerEnd: number
+  distance: number
+}
+
+export async function getFuelDetailService(
+  tenantId: string,
+  startDate?: string,
+  endDate?: string
+): Promise<FuelDetailRow[]> {
+  try {
+    const dateFilter: any = { Status: 'active' }
+    if (startDate && endDate) {
+      const end = new Date(endDate)
+      end.setHours(23, 59, 59, 999)
+      dateFilter.DateTime = {
+        gte: new Date(startDate),
+        lte: end
+      }
+    }
+
+    const rows = await prisma.gasolineCost.findMany({
+      where: {
+        ...dateFilter,
+        Vehicle: { TenantId: tenantId }
+      },
+      include: {
+        Vehicle: { include: { VehicleType: true, VehicleDriver: true } }
+      },
+      orderBy: { DateTime: 'desc' }
+    })
+
+    return rows.map((r) => ({
+      id: r.GasolineCostId,
+      vehicleId: r.VehicleId,
+      licensePlate: [r.Vehicle.LicensePlatePrefix, r.Vehicle.LicensePlateSuffix, r.Vehicle.LicensePlateProvince].filter(Boolean).join(' ').trim() || r.Vehicle.Model || `รถ ${r.Vehicle.No}`,
+      vehicleType: r.Vehicle.VehicleType?.Name || 'ไม่ระบุ',
+      driverName: r.Vehicle.VehicleDriver?.Name || 'ไม่ระบุ',
+      date: r.DateTime.toISOString().split('T')[0],
+      item: r.Item || '',
+      taxInvoiceNumber: r.TaxInvoiceNumber || '',
+      liters: r.Liters,
+      amount: Number(r.Amount),
+      odometerStart: r.OdometerStart,
+      odometerEnd: r.OdometerEnd,
+      distance: r.OdometerEnd - r.OdometerStart
+    }))
+  } catch (error) {
+    console.error('Error in getFuelDetailService:', error)
+    throw error
+  }
+}
+
 export async function getFuelSummaryService(
   tenantId: string,
   startDate?: string,
@@ -107,11 +173,13 @@ export async function getFuelSummaryService(
 ): Promise<FuelSummaryRow[]> {
   try {
     // สร้าง where condition สำหรับการกรองตามวันที่
-    const dateFilter: any = {}
+    const dateFilter: any = { Status: 'active' }
     if (startDate && endDate) {
+      const end = new Date(endDate)
+      end.setHours(23, 59, 59, 999)
       dateFilter.DateTime = {
         gte: new Date(startDate),
-        lte: new Date(endDate)
+        lte: end
       }
     }
 

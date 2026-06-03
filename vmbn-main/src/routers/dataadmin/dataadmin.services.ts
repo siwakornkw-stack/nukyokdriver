@@ -119,3 +119,65 @@ export async function deleteRecords(type: DataType, tenantId: string, body: { id
   const res = await (db as any)[cfg.model].deleteMany({ where: buildWhere(type, tenantId, filter) })
   return res.count
 }
+
+// ---------- vehicle deletion (admin) ----------
+// Child tables that reference Vehicle via VehicleId; deleted before the vehicle
+// itself because the FKs have no ON DELETE CASCADE.
+const VEHICLE_CHILDREN = [
+  'tax', 'compulsoryMotorInsuranceVehicle', 'insurancePolicyVehicle',
+  'attachFileVehicle', 'carTires', 'accidentVehicle', 'repairVehicle',
+  'gasolineCost', 'drainTheOilVehicle', 'installmentsVehicle',
+  'imageVehicle', 'incomeVehicle',
+] as const
+
+export interface VehicleRow { id: string; plate: string; model: string; status: string }
+
+export async function listVehicles(tenantId: string, search?: string): Promise<{ rows: VehicleRow[]; total: number }> {
+  const where: any = { TenantId: tenantId }
+  const q = search?.trim()
+  if (q) where.OR = [
+    { LicensePlatePrefix: { contains: q } },
+    { LicensePlateSuffix: { contains: q } },
+    { Model: { contains: q } },
+  ]
+  const [rows, total] = await Promise.all([
+    db.vehicle.findMany({ where, select: { VehicleId: true, LicensePlatePrefix: true, LicensePlateSuffix: true, Model: true, Status: true }, orderBy: { CreatedAt: 'desc' }, take: 500 }),
+    db.vehicle.count({ where }),
+  ])
+  return {
+    total,
+    rows: rows.map((v) => ({
+      id: v.VehicleId,
+      plate: [v.LicensePlatePrefix, v.LicensePlateSuffix].filter(Boolean).join(' ').trim(),
+      model: v.Model,
+      status: v.Status,
+    })),
+  }
+}
+
+// Validate ids belong to the tenant, then count how many child rows would be
+// removed alongside the vehicles.
+async function tenantVehicleIds(tenantId: string, ids: string[]): Promise<string[]> {
+  const valid = await db.vehicle.findMany({ where: { VehicleId: { in: ids }, TenantId: tenantId }, select: { VehicleId: true } })
+  return valid.map((v) => v.VehicleId)
+}
+
+export async function previewVehicleDelete(tenantId: string, ids: string[]): Promise<{ vehicles: number; children: number }> {
+  if (!ids?.length) return { vehicles: 0, children: 0 }
+  const vids = await tenantVehicleIds(tenantId, ids)
+  if (!vids.length) return { vehicles: 0, children: 0 }
+  let children = 0
+  for (const model of VEHICLE_CHILDREN) children += await (db as any)[model].count({ where: { VehicleId: { in: vids } } })
+  return { vehicles: vids.length, children }
+}
+
+export async function deleteVehicles(tenantId: string, ids: string[]): Promise<{ vehicles: number; children: number }> {
+  if (!ids?.length) throw new Error('ไม่ได้เลือกรถ')
+  const vids = await tenantVehicleIds(tenantId, ids)
+  if (!vids.length) throw new Error('ไม่พบรถที่เลือก')
+  const ops = VEHICLE_CHILDREN.map((model) => (db as any)[model].deleteMany({ where: { VehicleId: { in: vids } } }))
+  ops.push(db.vehicle.deleteMany({ where: { VehicleId: { in: vids }, TenantId: tenantId } }))
+  const res = await db.$transaction(ops)
+  const children = res.slice(0, VEHICLE_CHILDREN.length).reduce((a: number, r: any) => a + r.count, 0)
+  return { vehicles: res[res.length - 1].count, children }
+}

@@ -24,6 +24,7 @@ import TableRow from '@mui/material/TableRow';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 
+import VehicleDeletePanel from './VehicleDeletePanel';
 import { getResponseData } from '../../../../types/utils';
 import { getVehicleAll } from '../../../../services/vehicle.service';
 import {
@@ -204,6 +205,8 @@ export default function PageDataAdmin(): React.JSX.Element {
           ) : null}
         </Card>
       ) : null}
+
+      <VehicleDeletePanel />
 
       <Dialog open={Boolean(confirm)} onClose={() => (deleting ? null : setConfirm(null))}>
         <DialogTitle>ยืนยันการลบ</DialogTitle>

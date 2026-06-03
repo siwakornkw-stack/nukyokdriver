@@ -65,6 +65,7 @@ accidentTime: เวลาเกิดเหตุ
 party: คู่กรณี
 opponent: ฝ่ายตรงข้าม
 fuelItem: ชนิด/รายการน้ำมัน
+taxInvoiceNumber: เลขที่ใบกำกับภาษี / เลขที่ใบเสร็จ
 liters: จำนวนลิตร
 amount: จำนวนเงิน
 odometerStart: เลขไมล์เริ่ม
