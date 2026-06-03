@@ -7,6 +7,7 @@ export interface IAccessTokenPayload {
   tenantId: Tenant['TenantId']
   customerId: Customer['CustomerId']
   username: Customer['Username']
+  role: string
   jti: string
 }
 
@@ -44,7 +45,8 @@ export function generateTokens(TenantId: Tenant['TenantId'], customer: Customer,
   const accessTokenPayload: IAccessTokenPayload = {
     tenantId: TenantId,
     customerId: customer.CustomerId,
-    username: customer.Username,    
+    username: customer.Username,
+    role: customer.Role,
     jti: jti,
   }
   const refreshTokenPayload: IRefreshTokenPayload = {

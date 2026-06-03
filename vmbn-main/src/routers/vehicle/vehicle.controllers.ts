@@ -33,9 +33,10 @@ export async function getVehicleAll(req: IGetUserAuthInfoRequest, res: Response,
       data: response
     })
   } catch (error: any) {
-    res.status(500).json({
+    const statusCode = res.statusCode !== 200 ? res.statusCode : 500
+    res.status(statusCode).json({
       success: false,
-      code: 500,
+      code: statusCode,
       message: error.message
     });
   }
@@ -2200,6 +2201,9 @@ export async function addVehicleDriver(req: IGetUserAuthInfoRequest, res: Respon
     const payload: Prisma.VehicleDriverCreateInput = {
       Status: 'active',
       Name: data.name,
+      MobileNo: data.mobileNo ?? null,
+      LicenseNo: data.licenseNo ?? null,
+      ImageUrl: data.imageUrl ?? null,
       CreatedByUsername: parsedToken.username,
       UpdatedByUsername: parsedToken.username,
       TenantId: parsedToken.tenantId
@@ -2235,6 +2239,9 @@ export async function updateVehicleDriver(req: IGetUserAuthInfoRequest, res: Res
     const data = req.body
     const payload: Prisma.VehicleDriverUpdateInput = {
       Name: data.name,
+      MobileNo: data.mobileNo ?? null,
+      LicenseNo: data.licenseNo ?? null,
+      ImageUrl: data.imageUrl ?? null,
       UpdatedAt: new Date(),
       UpdatedByUsername: parsedToken.username
     }
@@ -2255,6 +2262,57 @@ export async function updateVehicleDriver(req: IGetUserAuthInfoRequest, res: Res
       code: 500,
       message: error.message
     });
+  }
+}
+
+export async function getDriversManaged(req: IGetUserAuthInfoRequest, res: Response, next: NextFunction) {
+  try {
+    const parsedToken: ParsedToken | undefined = req.parsedToken
+    if (!parsedToken) throw new Error('Unauthorized')
+
+    const drivers = await vehicleServices.getDriversManaged(parsedToken.tenantId)
+
+    const data = drivers.map((d) => ({
+      id: d.VehicleDriverId,
+      name: d.Name,
+      mobileNo: d.MobileNo ?? '',
+      licenseNo: d.LicenseNo ?? '',
+      imageUrl: d.ImageUrl ?? '',
+      status: d.Status,
+      lineUserId: d.LineUserId ?? '',
+      vehicleCount: d._count.Vehicle,
+      jobCount: d._count.DriverJobs,
+      createdAt: d.CreatedAt
+    }))
+
+    res.json({ success: true, code: 200, message: 'success', data })
+  } catch (error: any) {
+    res.status(500).json({ success: false, code: 500, message: error.message })
+  }
+}
+
+export async function deleteVehicleDriver(req: IGetUserAuthInfoRequest, res: Response, next: NextFunction) {
+  try {
+    const parsedToken: ParsedToken | undefined = req.parsedToken
+    if (!parsedToken) throw new Error('Unauthorized')
+
+    const id = req.params.id
+    if (!id) {
+      res.status(400)
+      throw new Error('VehicleDriver id is required')
+    }
+
+    const result = await vehicleServices.deleteVehicleDriverService(id, parsedToken.tenantId, parsedToken.username)
+
+    if (!result || result.count === 0) {
+      res.status(404)
+      throw new Error('ไม่พบคนขับที่ต้องการลบ')
+    }
+
+    res.json({ success: true, code: 200, message: 'ลบคนขับสำเร็จ', data: { deletedCount: result.count } })
+  } catch (error: any) {
+    const statusCode = res.statusCode !== 200 ? res.statusCode : 500
+    res.status(statusCode).json({ success: false, code: statusCode, message: error.message })
   }
 }
 
@@ -4614,6 +4672,60 @@ export async function deleteVehicle(req: IGetUserAuthInfoRequest, res: Response,
       data: result
     })
 
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      code: 500,
+      message: error.message
+    })
+  }
+}
+
+export async function getDuplicateVehicles(req: IGetUserAuthInfoRequest, res: Response, next: NextFunction) {
+  try {
+    const parsedToken: ParsedToken | undefined = req.parsedToken
+    if (!parsedToken) throw new Error('Unauthorized')
+
+    const groups = await vehicleServices.findDuplicateVehicles(parsedToken.tenantId)
+
+    res.json({
+      success: true,
+      code: 200,
+      message: `พบกลุ่มข้อมูลซ้ำ ${groups.length} กลุ่ม`,
+      data: groups
+    })
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      code: 500,
+      message: error.message
+    })
+  }
+}
+
+export async function bulkDeleteVehicles(req: IGetUserAuthInfoRequest, res: Response, next: NextFunction) {
+  try {
+    const parsedToken: ParsedToken | undefined = req.parsedToken
+    if (!parsedToken) throw new Error('Unauthorized')
+
+    const ids = req.body?.ids
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        code: 400,
+        message: 'กรุณาระบุ ids ที่ต้องการลบ'
+      })
+    }
+
+    const deletedCount = await vehicleServices.bulkSoftDeleteVehicles(ids, parsedToken.tenantId, parsedToken.username)
+
+    res.json({
+      success: true,
+      code: 200,
+      message: `ลบข้อมูลซ้ำ ${deletedCount} รายการสำเร็จ`,
+      data: { deletedCount }
+    })
   } catch (error: any) {
     res.status(500).json({
       success: false,

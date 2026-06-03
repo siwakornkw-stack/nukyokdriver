@@ -110,8 +110,9 @@ export async function register(
       })
     }
   } catch (error: any) {
-    console.log('register',req.body,error);
-    res.status(500).json({
+    console.log('register error', error);
+    const statusCode = res.statusCode !== 200 ? res.statusCode : 500
+    res.status(statusCode).json({
       success: false,
       message: error.message
     });
@@ -146,17 +147,19 @@ export async function login(
     const jti = randomUUID()
     const { accessToken, refreshToken } = generateTokens(TenantId, existingUser, jti)
 
-    await addRefreshTokenToWhitelist({
-      jti,
-      refreshToken,
-      CustomerId: existingUser.CustomerId,
-      TenantId: TenantId
-    })
-    await updateUserLogin({
-      CustomerId: existingUser.CustomerId,
-      RefreshTokensId: jti,
-      LatestIpAddress: req.ip
-    });
+    await Promise.all([
+      addRefreshTokenToWhitelist({
+        jti,
+        refreshToken,
+        CustomerId: existingUser.CustomerId,
+        TenantId: TenantId
+      }),
+      updateUserLogin({
+        CustomerId: existingUser.CustomerId,
+        RefreshTokensId: jti,
+        LatestIpAddress: req.ip
+      })
+    ]);
     if (refreshTokenInCookie === 'true') {
       sendRefreshToken(res, refreshToken)
       res.json({
@@ -181,8 +184,9 @@ export async function login(
       })
     }
   } catch (error: any) {
-    console.log('login',req.body,error);
-    res.status(500).json({
+    console.log('login error', error);
+    const statusCode = res.statusCode !== 200 ? res.statusCode : 500
+    res.status(statusCode).json({
       success: false,
       message: error.message
     });
@@ -260,9 +264,10 @@ export async function refreshTokens(
       error instanceof Error &&
       (error.name === 'TokenExpiredError' || error.name === 'JsonWebTokenError')
     ) {
-      return res.status(401);
+      return res.status(401).end();
     }
-    return res.status(500).json(error);
+    const statusCode = res.statusCode !== 200 ? res.statusCode : 500
+    return res.status(statusCode).json(error)
   }
 }
 export async function logout(

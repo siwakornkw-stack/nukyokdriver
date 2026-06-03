@@ -8,6 +8,8 @@ const router = Router()
 // In-memory upload (xlsx/csv parsed from buffer — works on Vercel serverless).
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } })
 
+router.get('/ai-status', requireUser, ImportController.checkAi)
+
 router.post('/auto', requireUser, (req, res, next) => {
   upload.single('file')(req, res, (err) => {
     if (err) return res.status(400).json({ success: false, message: err.message })

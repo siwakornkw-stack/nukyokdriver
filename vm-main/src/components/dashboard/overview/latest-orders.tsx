@@ -19,15 +19,6 @@ import dayjs from 'dayjs';
 import type { VehicleModel } from '@/types/vehicle';
 import { useRouter } from 'next/navigation';
 
-
-export interface Order {
-  id: string;
-  customer: { name: string };
-  amount: number;
-  status: string;
-  createdAt: Date;
-}
-
 export interface LatestOrdersProps {
   orders?: VehicleModel[];
   sx?: SxProps;
@@ -50,18 +41,20 @@ export function LatestOrders({ orders = [], sx }: LatestOrdersProps): React.JSX.
             </TableRow>
           </TableHead>
           <TableBody>
+            {orders.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} align="center" sx={{ color: 'text.secondary', py: 4 }}>
+                  ยังไม่มีรายการ — รายการยานพาหนะล่าสุดจะแสดงที่นี่
+                </TableCell>
+              </TableRow>
+            ) : null}
             {orders.slice(0,6).map((order) => {
-              //const { label, color } = statusMap['delivered']/* statusMap[order.status] ?? { label: 'Unknown', color: 'default' } */;
-              //const { label, color } = statusMap[order.status] ?? { label: 'Unknown', color: 'default' };
               return (
                 <TableRow hover key={order.id}>
                   <TableCell>Vehicle-{order.no.toString().padStart(5, '0')}</TableCell>
                   <TableCell>{order.licensePlatePrefix + ' ' + order.licensePlateSuffix + ' ' + order.licensePlateProvince}</TableCell>
                   <TableCell>{dayjs(order.createdAt).format('DD MMMM YYYY HH:mm')}</TableCell>
-                  <TableCell>
-                    {/* <Chip color={color} label={label} size="small" /> */}
-                    {order.status}
-                  </TableCell>
+                  <TableCell>{order.status}</TableCell>
                 </TableRow>
               );
             })}

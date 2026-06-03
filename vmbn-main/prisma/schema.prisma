@@ -28,6 +28,7 @@ model Tenant {
   Status String @db.VarChar(15)
   LineImgUrl String?
   LineChannelAccessToken String?
+  LineChannelSecret String?
   SystemExpiredDate DateTime
   Remark String?
   CreatedTime DateTime @default(now())
@@ -77,6 +78,7 @@ model Customer {
   TenantId String @db.VarChar(36)
   Tenant Tenant @relation(fields: [TenantId], references: [TenantId])
   Status String @db.VarChar(15)
+  Role String @default("admin") @db.VarChar(20)
   ImageUrl String?
   Name String?
   Username String
@@ -99,7 +101,19 @@ model Customer {
   LatestOnline DateTime?
   PasswordHash String
   RefreshTokens RefreshTokens[] @relation("CustomerToRefreshTokens")
+  Notifications Notification[]
   @@index([TenantId])
+  @@index([CustomerId])
+}
+
+model Notification {
+  NotificationId String @id @default(uuid()) @db.VarChar(36)
+  CustomerId String @db.VarChar(36)
+  Customer Customer @relation(fields: [CustomerId], references: [CustomerId])
+  Title String
+  Message String
+  IsRead Boolean @default(false)
+  CreatedTime DateTime @default(now())
   @@index([CustomerId])
 }
 
@@ -287,6 +301,9 @@ model VehicleDriver {
   VehicleDriverId String @id @default(uuid()) @db.VarChar(36)
   Status String @db.VarChar(15)
   Name String
+  MobileNo String? @db.VarChar(50)
+  LicenseNo String? @db.VarChar(50)
+  ImageUrl String?
   CreatedAt DateTime @default(now())
   UpdatedAt DateTime @default(now())
   CreatedByUsername String?
@@ -303,8 +320,9 @@ model VehicleDriver {
 model DriverJob {
   DriverJobId String @id @default(uuid()) @db.VarChar(36)
   TenantId String @db.VarChar(36)
-  VehicleDriverId String @db.VarChar(36)
-  VehicleDriver VehicleDriver @relation(fields: [VehicleDriverId], references: [VehicleDriverId])
+  JobNo Int?
+  VehicleDriverId String? @db.VarChar(36)
+  VehicleDriver VehicleDriver? @relation(fields: [VehicleDriverId], references: [VehicleDriverId])
   VehicleId String? @db.VarChar(36)
   VehicleNo String?
   Origin String
@@ -319,6 +337,20 @@ model DriverJob {
   @@index([TenantId])
   @@index([VehicleDriverId])
   @@index([Status])
+  @@index([TenantId, JobNo])
+}
+
+model LineCommand {
+  LineCommandId String @id @default(uuid()) @db.VarChar(36)
+  TenantId String @db.VarChar(36)
+  LineUserId String
+  Role String @db.VarChar(15)
+  RawText String
+  ParsedAction String?
+  ResultStatus String @db.VarChar(15)
+  CreatedAt DateTime @default(now())
+  @@index([TenantId])
+  @@index([LineUserId])
 }
 model VehicleStatus {
   TenantId String @db.VarChar(36)

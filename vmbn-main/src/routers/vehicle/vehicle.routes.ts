@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireUser } from '../middlewares'
+import { requireUser, requireWrite } from '../middlewares'
 import * as VehicleController from './vehicle.controllers'
 import multer from 'multer'
 import { blobStorage, tmpStorage } from '../../utils/storage'
@@ -421,15 +421,28 @@ router.get(
     requireUser,
     VehicleController.getVehicleDriver
 )
+router.get(
+    '/vehicle-driver/manage',
+    requireUser,
+    VehicleController.getDriversManaged
+)
 router.post(
     '/vehicle-driver/add',
     requireUser,
+    requireWrite,
     VehicleController.addVehicleDriver
 )
 router.post(
     '/vehicle-driver/update/:id',
     requireUser,
+    requireWrite,
     VehicleController.updateVehicleDriver
+)
+router.delete(
+    '/vehicle-driver/delete/:id',
+    requireUser,
+    requireWrite,
+    VehicleController.deleteVehicleDriver
 )
 
 router.get(
@@ -807,6 +820,18 @@ router.post(
         });
     },
     VehicleController.uploadFile
+)
+
+// ================== ตรวจสอบ / ลบข้อมูลซ้ำ ==================
+router.get(
+    '/duplicates',
+    requireUser,
+    VehicleController.getDuplicateVehicles
+)
+router.post(
+    '/duplicates/delete',
+    requireUser,
+    VehicleController.bulkDeleteVehicles
 )
 
 // ================== ลบข้อมูลตาม type ==================

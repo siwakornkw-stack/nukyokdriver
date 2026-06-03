@@ -22,9 +22,10 @@ export async function user(req: IGetUserAuthInfoRequestAdmin, res: Response, nex
       data: response
     })
   } catch (error: any) {
-    res.status(500).json({
+    const statusCode = res.statusCode !== 200 ? res.statusCode : 500
+    res.status(statusCode).json({
       success: false,
-      code: 500,
+      code: statusCode,
       message: error.message
     });
   }

@@ -92,9 +92,14 @@ export function Summary({ sx }: SummaryProps): React.JSX.Element {
             </TableRow>
           </TableHead>
           <TableBody>
+            {(summaryData?.data?.data.vehicleSummary.length ?? 0) === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} align="center" sx={{ color: 'text.secondary', py: 4 }}>
+                  ไม่มีข้อมูลในช่วงวันที่ที่เลือก
+                </TableCell>
+              </TableRow>
+            ) : null}
             {summaryData?.data?.data.vehicleSummary.slice(0, 6).map((order) => {
-              //const { label, color } = statusMap['delivered']/* statusMap[order.status] ?? { label: 'Unknown', color: 'default' } */;
-              //const { label, color } = statusMap[order.status] ?? { label: 'Unknown', color: 'default' };
               return (
                 <TableRow hover key={order.no}>
                   <TableCell>Vehicle-{order.no.toString().padStart(5, '0')}</TableCell>
@@ -109,8 +114,8 @@ export function Summary({ sx }: SummaryProps): React.JSX.Element {
             <TableRow sx={{
               '& td': {
                 fontWeight: 'bold',
-                borderTop: '2px solid rgba(0, 0, 0, 0.12)',
-                backgroundColor: 'rgba(0, 0, 0, 0.04)'
+                borderTop: '2px solid var(--mui-palette-divider)',
+                backgroundColor: 'var(--mui-palette-background-level1)'
               }
             }}>
               <TableCell></TableCell>

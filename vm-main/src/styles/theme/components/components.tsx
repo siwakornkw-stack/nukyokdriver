@@ -6,6 +6,7 @@ import { MuiButton } from './button';
 import { MuiCard } from './card';
 import { MuiCardContent } from './card-content';
 import { MuiCardHeader } from './card-header';
+import { MuiOutlinedInput } from './input';
 import { MuiLink } from './link';
 import { MuiStack } from './stack';
 import { MuiTab } from './tab';
@@ -19,6 +20,7 @@ export const components = {
   MuiCard,
   MuiCardContent,
   MuiCardHeader,
+  MuiOutlinedInput,
   MuiLink,
   MuiStack,
   MuiTab,

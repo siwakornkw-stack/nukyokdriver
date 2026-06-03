@@ -22,7 +22,7 @@ import { getVehicleAll } from '../../../../services/vehicle.service';
 import { VehicleAllResponse } from '@/types/vehicle';
 import ShareSweetAlert from '@/components/ShareSweetAlert';
 import { SSENotificationData, useNotification } from '@/contexts/notification-context';
-import { Skeleton, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
+import { Alert, Button, Skeleton, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
 import { checkLine } from '../../../../services/auth.service';
 import { CheckLine } from '@/types/user';
 import { Summary } from './summary';
@@ -41,7 +41,8 @@ export default function PageOverview(): React.JSX.Element {
   const {
     data: dashboardData,
     isLoading: isDashboardLoading,
-    isError: isDashboardError } = useQuery<WrapResponse<DashboardResponse | null>>({
+    isError: isDashboardError,
+    refetch: refetchDashboard } = useQuery<WrapResponse<DashboardResponse | null>>({
       queryKey: ['dashboard'],
       queryFn: getDashboard,
       refetchInterval: 30000,
@@ -52,7 +53,8 @@ export default function PageOverview(): React.JSX.Element {
   const {
     data: vehicleData,
     isLoading: isVehicleLoading,
-    isError: isVehicleError } = useQuery<WrapResponse<VehicleAllResponse | null>>({
+    isError: isVehicleError,
+    refetch: refetchVehicle } = useQuery<WrapResponse<VehicleAllResponse | null>>({
       queryKey: ['vehicle'],
       queryFn: () => getVehicleAll('UpdatedAt', 'desc', 6),
       refetchInterval: 30000,
@@ -62,11 +64,7 @@ export default function PageOverview(): React.JSX.Element {
 
   async function openCheckLine(data: CheckLine) {
     try {
-      // เพิ่ม console.log เพื่อดีบัก
-      console.log('Attempting to open alert');
-
       if (!swalRef.current) {
-        console.error('swalRef is not available');
         return;
       }
       const alertContent = (
@@ -95,17 +93,14 @@ export default function PageOverview(): React.JSX.Element {
           <Typography sx={{ fontSize: '16px', fontWeight: 'bold' }}>{data.pid}</Typography>
         </Stack>
       );
-      const result = await swalRef.current.open({
-        // icon: "/assets/logo.png",
+      await swalRef.current.open({
         title: "ระบบแจ้งเตือน",
         cancelText: "ปิด",
         html: alertContent,
         showConfirmButton: false
       });
-
-      console.log('Alert result:', result);
-    } catch (error) {
-      console.error('Error opening alert:', error);
+    } catch {
+      // ignore alert open failure
     }
   }
 
@@ -127,30 +122,16 @@ export default function PageOverview(): React.JSX.Element {
   }, []);
 
   useEffect(() => {
-    if (isDashboardLoading) {
-      console.log('กำลังโหลดข้อมูล...');
-    }
-    if (isDashboardError) {
-      console.error('เกิดข้อผิดพลาด:', isDashboardError);
-    }
     if (dashboardData) {
-      console.log('ข้อมูลอัพเดท:', dashboardData);
       setDashboardData((dashboardData as WrapResponse<DashboardResponse>).data ?? null);
     }
-  }, [dashboardData, isDashboardError, isDashboardLoading]);
+  }, [dashboardData]);
 
   useEffect(() => {
-    if (isVehicleLoading) {
-      console.log('กำลังโหลดข้อมูล Vehicle ...');
-    }
-    if (isVehicleError) {
-      console.error('เกิดข้อผิดพลาด Vehicle:', isVehicleError);
-    }
     if (vehicleData) {
-      console.log('ข้อมูลอัพเดท Vehicle:', vehicleData);
       setVehicleData((vehicleData as WrapResponse<VehicleAllResponse>).data ?? null);
     }
-  }, [vehicleData, isVehicleError, isVehicleLoading]);
+  }, [vehicleData]);
 
   const [timeRange, setTimeRange] = useState<'year' | 'month' | 'week'>('year');
 
@@ -162,6 +143,21 @@ export default function PageOverview(): React.JSX.Element {
       setTimeRange(newTimeRange);
     }
   };
+
+  useEffect(() => {
+    const shortcuts: Record<string, 'year' | 'month' | 'week'> = { y: 'year', m: 'month', w: 'week' };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return;
+      const next = shortcuts[e.key.toLowerCase()];
+      if (next) {
+        setTimeRange(next);
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, []);
 
   const getTimeRangeData = () => {
     if (!DashboardData?.data) return null;
@@ -207,11 +203,11 @@ export default function PageOverview(): React.JSX.Element {
   };
 
   const timeRangeData = getTimeRangeData();
+  const compareLabel = timeRange === 'month' ? 'จากเดือนที่แล้ว' : timeRange === 'week' ? 'จากสัปดาห์ที่แล้ว' : 'จากปีที่แล้ว';
 
   useEffect(() => {
     const handleNotification = (sse: SSENotificationData) => {
-      console.log( 'handleNotification', sse);
-      swalRef.current?.close();      
+      swalRef.current?.close();
       if (sse.data) {
         CustomToast.success('Success', sse.data.message);
       }
@@ -225,39 +221,68 @@ export default function PageOverview(): React.JSX.Element {
 
       <ShareSweetAlert />
 
-      <ToggleButtonGroup
-        value={timeRange}
-        exclusive
-        onChange={handleTimeRangeChange}
-        sx={{ mb: 3 }}
+      {(isDashboardError || isVehicleError) ? (
+        <Alert
+          severity="error"
+          sx={{ mb: 3 }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              onClick={() => {
+                if (isDashboardError) void refetchDashboard();
+                if (isVehicleError) void refetchVehicle();
+              }}
+            >
+              ลองใหม่
+            </Button>
+          }
+        >
+          โหลดข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง
+        </Alert>
+      ) : null}
+
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        spacing={2}
+        sx={{ alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between', mb: 3 }}
       >
-        <ToggleButton value="year">
-          ปีนี้
-        </ToggleButton>
-        <ToggleButton value="month">
-          เดือนนี้
-        </ToggleButton>
-        <ToggleButton value="week">
-          สัปดาห์นี้
-        </ToggleButton>
-      </ToggleButtonGroup>
+        <Typography variant="h4">ภาพรวม</Typography>
+        <Stack spacing={0.5} sx={{ alignItems: { xs: 'flex-start', sm: 'flex-end' } }}>
+          <ToggleButtonGroup
+            value={timeRange}
+            exclusive
+            onChange={handleTimeRangeChange}
+          >
+            <ToggleButton value="year" title="ปีนี้ (กด Y)">
+              ปีนี้
+            </ToggleButton>
+            <ToggleButton value="month" title="เดือนนี้ (กด M)">
+              เดือนนี้
+            </ToggleButton>
+            <ToggleButton value="week" title="สัปดาห์นี้ (กด W)">
+              สัปดาห์นี้
+            </ToggleButton>
+          </ToggleButtonGroup>
+          <Typography color="text.secondary" variant="caption">
+            ทางลัด: กด Y / M / W เพื่อสลับช่วงเวลา
+          </Typography>
+        </Stack>
+      </Stack>
 
       <Grid container spacing={3}>
         <Grid lg={3} sm={6} xs={12}>
-          <Budget diff={timeRangeData?.outgoingsDiff ?? 0} trend={timeRangeData?.outgoingsTrend ?? 'up'} sx={{ height: '100%' }} value={`฿${formatMoney(timeRangeData?.outgoings ?? 0)}`} subValue={timeRange === 'month' ? 'จากเดือนที่แล้ว' : timeRange === 'week' ? 'จากสัปดาห์ที่แล้ว' : 'จากปีที่แล้ว'} />
+          <Income helpText="รายได้รวมในช่วงเวลาที่เลือก" loading={isDashboardLoading} diff={timeRangeData?.incomeDiff ?? 0} trend={timeRangeData?.incomeTrend ?? 'up'} sx={{ height: '100%' }} value={`฿${formatMoney(timeRangeData?.income ?? 0)}`} subValue={compareLabel} />
         </Grid>
         <Grid lg={3} sm={6} xs={12}>
-          <Income diff={timeRangeData?.incomeDiff ?? 0} trend={timeRangeData?.incomeTrend ?? 'up'} sx={{ height: '100%' }} value={`฿${formatMoney(timeRangeData?.income ?? 0)}`} subValue={timeRange === 'month' ? 'จากเดือนที่แล้ว' : timeRange === 'week' ? 'จากสัปดาห์ที่แล้ว' : 'จากปีที่แล้ว'} />
-        </Grid>
-        {/* <Grid lg={3} sm={6} xs={12}>
-        <TotalCustomers diff={16} trend="down" sx={{ height: '100%' }} value="1.6k" />
-      </Grid> */}
-        <Grid lg={3} sm={6} xs={12}>
-          <TasksProgress sx={{ height: '100%' }} value={timeRangeData?.incomePercentage ?? 0} />
-        </Grid>
-        <Grid lg={3} sm={6} xs={12}>
-          <TotalProfit sx={{ height: '100%' }}
+          <TotalProfit helpText="กำไรสุทธิ = รายได้ - ค่าใช้จ่าย" loading={isDashboardLoading} sx={{ height: '100%' }}
             value={timeRangeData?.profit ? `฿${formatMoney(timeRangeData.profit)}` : '฿0'} />
+        </Grid>
+        <Grid lg={3} sm={6} xs={12}>
+          <Budget helpText="ค่าใช้จ่ายรวมในช่วงเวลาที่เลือก" loading={isDashboardLoading} diff={timeRangeData?.outgoingsDiff ?? 0} trend={timeRangeData?.outgoingsTrend ?? 'up'} sx={{ height: '100%' }} value={`฿${formatMoney(timeRangeData?.outgoings ?? 0)}`} subValue={compareLabel} />
+        </Grid>
+        <Grid lg={3} sm={6} xs={12}>
+          <TasksProgress helpText="สัดส่วนรายได้เทียบเป้าหมาย" loading={isDashboardLoading} sx={{ height: '100%' }} value={timeRangeData?.incomePercentage ?? 0} />
         </Grid>
         <Grid lg={8} xs={12}>
           <Sales

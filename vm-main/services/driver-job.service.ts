@@ -33,7 +33,7 @@ export interface DriverJob {
 }
 
 export interface AddJobPayload {
-  VehicleDriverId: string;
+  VehicleDriverId?: string;
   VehicleNo?: string;
   Origin: string;
   Destination: string;
@@ -43,6 +43,20 @@ export interface AddJobPayload {
 
 export async function getDrivers(): Promise<{ success: boolean; data: DriverWithLine[] }> {
   const r = await fetch(`${urlApi}/driver-job/drivers`, { headers: authHeaders() });
+  return r.json();
+}
+
+export interface LineSender {
+  userId: string;
+  displayName: string | null;
+  lastText: string | null;
+  lastType: string;
+  lastAt: string;
+  linkedDriverName: string | null;
+}
+
+export async function getLineSenders(): Promise<{ success: boolean; data: LineSender[] }> {
+  const r = await fetch(`${urlApi}/driver-job/line/senders`, { headers: authHeaders() });
   return r.json();
 }
 
@@ -65,6 +79,15 @@ export async function addJob(payload: AddJobPayload): Promise<{ success: boolean
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify(payload),
+  });
+  return r.json();
+}
+
+export async function assignJob(id: string, vehicleDriverId: string): Promise<{ success: boolean; message?: string; pushed?: boolean }> {
+  const r = await fetch(`${urlApi}/driver-job/assign/${id}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ VehicleDriverId: vehicleDriverId }),
   });
   return r.json();
 }

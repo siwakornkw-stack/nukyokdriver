@@ -2,6 +2,16 @@ import { Response, NextFunction } from 'express'
 import { IGetUserAuthInfoRequest } from '../../typings/express'
 import { ParsedToken } from '../../typings/token'
 import { importWorkbook } from './importdata.services'
+import { checkAiHealth } from './aiMapper'
+
+export async function checkAi(req: IGetUserAuthInfoRequest, res: Response, next: NextFunction) {
+  try {
+    const parsedToken: ParsedToken | undefined = req.parsedToken
+    if (!parsedToken) throw new Error('Unauthorized')
+    const health = await checkAiHealth()
+    res.json({ success: true, ...health })
+  } catch (e) { next(e) }
+}
 
 export async function importAuto(req: IGetUserAuthInfoRequest, res: Response, next: NextFunction) {
   try {

@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express'
 import { IGetUserAuthInfoRequest } from "../../typings/express"
 import { ParsedToken } from '../../typings/token'
-import { getDailyIncomeForWeek, getGasolineCostFromDateRange, getGasolineCostLastYear, getGasolineCostThisDay, getGasolineCostThisMonth, getGasolineCostThisWeek, getGasolineCostThisYear, getIncomeVehicle, getIncomeVehicleFromDateRange, getIncomeVehicleLastDay, getIncomeVehicleLastMonth, getIncomeVehicleLastWeek, getIncomeVehicleLastYear, getIncomeVehicleThisDay, getIncomeVehicleThisMonth, getIncomeVehicleThisWeek, getIncomeVehicleThisYear, getMonthlyIncomeForYear, getOutgoingsLastDay, getOutgoingsLastMonth, getOutgoingsLastWeek, getRepairVehicleLastDay, getRepairVehicleLastMonth, getRepairVehicleLastWeek, getRepairVehicleLastYear, getRepairVehicleThisDay, getRepairVehicleThisMonth, getRepairVehicleThisWeek, getRepairVehicleThisYear, getWeeklyIncomeForMonth } from './dashboard.services'
+import { getDailyIncomeForWeek, getGasolineCostFromDateRange, getGasolineCostLastYear, getGasolineCostThisDay, getGasolineCostThisMonth, getGasolineCostThisWeek, getGasolineCostThisYear, getIncomeVehicle, getIncomeVehicleFromDateRange, getIncomeVehicleLastDay, getIncomeVehicleLastMonth, getIncomeVehicleLastWeek, getIncomeVehicleLastYear, getIncomeVehicleThisDay, getIncomeVehicleThisMonth, getIncomeVehicleThisWeek, getIncomeVehicleThisYear, getMonthlyIncomeForYear, getRepairVehicleFromDateRange, getOutgoingsLastDay, getOutgoingsLastMonth, getOutgoingsLastWeek, getRepairVehicleLastDay, getRepairVehicleLastMonth, getRepairVehicleLastWeek, getRepairVehicleLastYear, getRepairVehicleThisDay, getRepairVehicleThisMonth, getRepairVehicleThisWeek, getRepairVehicleThisYear, getWeeklyIncomeForMonth } from './dashboard.services'
 
 export async function getDashboardController(req: IGetUserAuthInfoRequest, res: Response, next: NextFunction) {
   try {
@@ -204,32 +204,31 @@ export async function getSummaryFromDateRange(req: IGetUserAuthInfoRequest, res:
 
     const income = await getIncomeVehicleFromDateRange(tenantId, start, end)
     const gasolineCost = await getGasolineCostFromDateRange(tenantId, start, end)
-    const outgoings = gasolineCost.reduce((acc, curr) => acc + curr.Amount.toNumber(), 0)
+    const repairCost = await getRepairVehicleFromDateRange(tenantId, start, end)
+    const outgoings =
+      gasolineCost.reduce((acc, curr) => acc + curr.Amount.toNumber(), 0) +
+      repairCost.reduce((acc, curr) => acc + curr.CompanyPay.toNumber(), 0)
     const totalIncome = income.reduce((acc, curr) => acc + curr.AmountReceive.toNumber(), 0)
     const profit = totalIncome - outgoings
 
     const vehicleSummary = new Map()
-
-    income.forEach((item, index) => {
-      if (!vehicleSummary.has(item.VehicleId)) {
-        vehicleSummary.set(item.VehicleId, {
+    const entry = (item: { VehicleId: string; Vehicle: any }) => {
+      let cur = vehicleSummary.get(item.VehicleId)
+      if (!cur) {
+        cur = {
           no: item.Vehicle.No,
           license: item.Vehicle.LicensePlatePrefix + item.Vehicle.LicensePlateSuffix + ' ' + item.Vehicle.LicensePlateProvince,
-          income: item.AmountReceive.toNumber(),
+          income: 0,
           outgoings: 0
-        })
-      } else {
-        const current = vehicleSummary.get(item.VehicleId)
-        current.income += item.AmountReceive.toNumber()
+        }
+        vehicleSummary.set(item.VehicleId, cur)
       }
-    })
+      return cur
+    }
 
-    gasolineCost.forEach(item => {
-      if (vehicleSummary.has(item.VehicleId)) {
-        const current = vehicleSummary.get(item.VehicleId)
-        current.outgoings += item.Amount.toNumber()
-      }
-    })
+    income.forEach(item => { entry(item).income += item.AmountReceive.toNumber() })
+    gasolineCost.forEach(item => { entry(item).outgoings += item.Amount.toNumber() })
+    repairCost.forEach(item => { entry(item).outgoings += item.CompanyPay.toNumber() })
 
     const response = {
       income: totalIncome,

@@ -222,3 +222,138 @@ export async function updateUser(data: UserUpdate): Promise<WrapResponse<ApiResp
         return wrapResponse({ status: 500, message: errorWrapper(error, 'updateUser') });
     }
 }
+
+export interface ManagedUser {
+    CustomerId: string;
+    Name?: string | null;
+    Username: string;
+    Email?: string | null;
+    MobileNo?: string | null;
+    Role: string;
+    Status: string;
+    ImageUrl?: string | null;
+    LatestLogin?: string | null;
+    CreatedTime?: string | null;
+}
+
+export interface ManagedUsersResponse {
+    success: boolean;
+    code: number;
+    message: string;
+    data: ManagedUser[];
+}
+
+export interface CreateManagedUserInput {
+    name?: string;
+    username: string;
+    password: string;
+    mobileNo: string;
+    email?: string;
+    role: string;
+}
+
+export async function listUsersManaged(): Promise<WrapResponse<ManagedUsersResponse | null>> {
+    try {
+        const accessToken = Cookies.get('access_token');
+        if (!accessToken)
+            return wrapResponse({ status: 401, message: 'Unauthorized' });
+        const domain = getDomain();
+        if (!domain)
+            return wrapResponse({ status: 401, message: 'Unauthorized' });
+
+        const response = await fetch(`${urlApi}/users/manage`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-domain': domain,
+                'Authorization': `Bearer ${accessToken}`
+            }
+        });
+
+        const result = await wrapResponse<ManagedUsersResponse>(response);
+
+        return result;
+    } catch (error: unknown) {
+        return wrapResponse({ status: 500, message: errorWrapper(error, 'listUsersManaged') });
+    }
+}
+
+export async function createUserManaged(data: CreateManagedUserInput): Promise<WrapResponse<ApiResponse>> {
+    try {
+        const accessToken = Cookies.get('access_token');
+        if (!accessToken)
+            return wrapResponse({ status: 401, message: 'Unauthorized' });
+        const domain = getDomain();
+        if (!domain)
+            return wrapResponse({ status: 401, message: 'Unauthorized' });
+
+        const response = await fetch(`${urlApi}/users/manage`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-domain': domain,
+                'Authorization': `Bearer ${accessToken}`
+            },
+            body: JSON.stringify(data)
+        });
+
+        const result = await wrapResponse<ApiResponse>(response);
+
+        return result;
+    } catch (error: unknown) {
+        return wrapResponse({ status: 500, message: errorWrapper(error, 'createUserManaged') });
+    }
+}
+
+export async function updateUserRole(id: string, role: string): Promise<WrapResponse<ApiResponse>> {
+    try {
+        const accessToken = Cookies.get('access_token');
+        if (!accessToken)
+            return wrapResponse({ status: 401, message: 'Unauthorized' });
+        const domain = getDomain();
+        if (!domain)
+            return wrapResponse({ status: 401, message: 'Unauthorized' });
+
+        const response = await fetch(`${urlApi}/users/manage/${id}/role`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-domain': domain,
+                'Authorization': `Bearer ${accessToken}`
+            },
+            body: JSON.stringify({ role })
+        });
+
+        const result = await wrapResponse<ApiResponse>(response);
+
+        return result;
+    } catch (error: unknown) {
+        return wrapResponse({ status: 500, message: errorWrapper(error, 'updateUserRole') });
+    }
+}
+
+export async function deactivateUserManaged(id: string): Promise<WrapResponse<ApiResponse>> {
+    try {
+        const accessToken = Cookies.get('access_token');
+        if (!accessToken)
+            return wrapResponse({ status: 401, message: 'Unauthorized' });
+        const domain = getDomain();
+        if (!domain)
+            return wrapResponse({ status: 401, message: 'Unauthorized' });
+
+        const response = await fetch(`${urlApi}/users/manage/${id}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-domain': domain,
+                'Authorization': `Bearer ${accessToken}`
+            }
+        });
+
+        const result = await wrapResponse<ApiResponse>(response);
+
+        return result;
+    } catch (error: unknown) {
+        return wrapResponse({ status: 500, message: errorWrapper(error, 'deactivateUserManaged') });
+    }
+}

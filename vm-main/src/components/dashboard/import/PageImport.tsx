@@ -17,10 +17,18 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 
-import { importAuto, type ImportSheetResult } from '../../../../services/import-data.service';
+import { importAuto, checkAiStatus, type ImportSheetResult, type AiStatusResponse } from '../../../../services/import-data.service';
+
+const AI_SEVERITY: Record<AiStatusResponse['status'], 'success' | 'warning' | 'error'> = {
+  ok: 'success', quota: 'warning', unavailable: 'warning', no_key: 'warning', error: 'error',
+};
+
+const AI_PROVIDER_LABEL: Record<AiStatusResponse['status'], string> = {
+  ok: 'พร้อม', quota: 'quota เต็ม', unavailable: 'โหลดสูง', no_key: 'ไม่มี key', error: 'ใช้ไม่ได้',
+};
 
 const TYPE_LABEL: Record<string, string> = {
-  vehicles: 'รถ', jobs: 'งาน', repair: 'ซ่อม', accident: 'อุบัติเหตุ',
+  vehicles: 'รถ', jobs: 'สั่งงานคนขับ', repair: 'ซ่อม', accident: 'อุบัติเหตุ',
   fuel: 'ค่าน้ำมัน', oil: 'เปลี่ยนน้ำมัน', installment: 'ค่างวด', income: 'รายได้', unknown: 'ไม่รู้จัก',
 };
 
@@ -29,6 +37,20 @@ export default function PageImport(): React.JSX.Element {
   const [loading, setLoading] = React.useState(false);
   const [message, setMessage] = React.useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [results, setResults] = React.useState<ImportSheetResult[]>([]);
+  const [aiChecking, setAiChecking] = React.useState(false);
+  const [aiStatus, setAiStatus] = React.useState<AiStatusResponse | null>(null);
+
+  const handleCheckAi = async (): Promise<void> => {
+    setAiChecking(true);
+    setAiStatus(null);
+    try {
+      setAiStatus(await checkAiStatus());
+    } catch {
+      setAiStatus({ success: false, status: 'error', message: 'เช็ค AI ไม่สำเร็จ' });
+    } finally {
+      setAiChecking(false);
+    }
+  };
 
   const handleUpload = async (): Promise<void> => {
     if (!file) {
@@ -61,7 +83,7 @@ export default function PageImport(): React.JSX.Element {
       <Card>
         <CardHeader
           title="โยนไฟล์ข้อมูลดิบ"
-          subheader="รองรับ .xlsx (หลาย sheet) / .csv / .json — AI จะตรวจว่าแต่ละ sheet เป็นรถ/งาน/ซ่อม/อุบัติเหตุ/ค่าน้ำมัน/เปลี่ยนน้ำมัน/ค่างวด/รายได้/ประกัน แล้วนำเข้าให้อัตโนมัติ"
+          subheader="รองรับ .xlsx (หลาย sheet) / .csv / .json — AI จะตรวจว่าแต่ละ sheet เป็นรถ/สั่งงานคนขับ(LINE)/ซ่อม/อุบัติเหตุ/ค่าน้ำมัน/เปลี่ยนน้ำมัน/ค่างวด/รายได้/ประกัน แล้วนำเข้าให้อัตโนมัติ"
         />
         <Divider />
         <CardContent>
@@ -72,17 +94,47 @@ export default function PageImport(): React.JSX.Element {
                 hidden
                 type="file"
                 accept=".xlsx,.xls,.csv,.json"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null;
+                  if (f && f.size > 4 * 1024 * 1024) {
+                    setFile(null);
+                    setMessage({ type: 'error', text: `ไฟล์ใหญ่เกินไป (${(f.size / 1024 / 1024).toFixed(1)} MB) — จำกัด 4 MB. ถ้าไฟล์มีรูปภาพฝัง ให้ลบรูปหรือ Save As เป็น .csv ก่อน` });
+                    return;
+                  }
+                  setMessage(null);
+                  setFile(f);
+                }}
               />
             </Button>
             <Typography variant="body2" color="text.secondary">
               {file ? file.name : 'ยังไม่ได้เลือกไฟล์'}
             </Typography>
             <Box sx={{ flexGrow: 1 }} />
+            <Button variant="text" disabled={aiChecking} onClick={() => void handleCheckAi()}>
+              {aiChecking ? 'กำลังเช็ค AI...' : 'เช็ค AI ก่อนนำเข้า'}
+            </Button>
             <Button variant="contained" disabled={!file || loading} onClick={() => void handleUpload()}>
               {loading ? 'กำลังนำเข้า...' : 'นำเข้าข้อมูล'}
             </Button>
           </Stack>
+          {aiStatus ? (
+            <Alert severity={AI_SEVERITY[aiStatus.status]} sx={{ mt: 2 }} onClose={() => setAiStatus(null)}>
+              {aiStatus.message}
+              {aiStatus.providers && aiStatus.providers.length > 0 ? (
+                <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap', gap: 0.5 }}>
+                  {aiStatus.providers.map((p) => (
+                    <Chip
+                      key={p.name}
+                      size="small"
+                      label={`${p.name}: ${AI_PROVIDER_LABEL[p.status]}`}
+                      color={p.status === 'ok' ? 'success' : p.status === 'error' ? 'error' : 'warning'}
+                      variant="outlined"
+                    />
+                  ))}
+                </Stack>
+              ) : null}
+            </Alert>
+          ) : null}
         </CardContent>
       </Card>
 

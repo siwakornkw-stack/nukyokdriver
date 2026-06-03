@@ -1,40 +1,46 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import type { SSENotificationData } from '@/contexts/notification-context';
 import { getDomain } from '../../helpers/helper';
 import Cookies from 'js-cookie';
 
 const urlApi = process.env.NEXT_PUBLIC_URL_API ?? '';
+const POLL_INTERVAL = 60000;
 
 interface SSENotificationProps {
     onNotification: (data: SSENotificationData) => void;
 }
 
 function SSENotification({ onNotification }: SSENotificationProps): null {
-    const eventSourceRef = useRef<EventSource>();
-
     useEffect(() => {
-        const connectSSE = (): void => {
+        let timer: ReturnType<typeof setTimeout>;
+        let stopped = false;
+
+        const poll = async (): Promise<void> => {
             const domain = getDomain();
-            if (!domain) return;
             const accessToken = Cookies.get('access_token');
-            if (!accessToken) return;
-            eventSourceRef.current = new EventSource(`${urlApi}/sse/connect?domain=${domain}&token=${accessToken}`);
-
-            eventSourceRef.current.onmessage = (event: MessageEvent<string>) => {
-                const data = JSON.parse(event.data) as SSENotificationData;
-                console.log('SSEdata', data);
-                onNotification(data);
-            };
-
-            eventSourceRef.current.onerror = (error) => {
-                console.error('SSE Error:', error);
-                setTimeout(connectSSE, 5000);
-            };
+            if (domain && accessToken) {
+                try {
+                    const res = await fetch(`${urlApi}/notification`, {
+                        headers: {
+                            Authorization: `Bearer ${accessToken}`,
+                            'x-domain': domain,
+                        },
+                    });
+                    if (res.ok) {
+                        const body = (await res.json()) as { data?: SSENotificationData[] };
+                        body.data?.forEach((item) => onNotification(item));
+                    }
+                } catch (error) {
+                    console.error('Notification poll error:', error);
+                }
+            }
+            if (!stopped) timer = setTimeout(poll, POLL_INTERVAL);
         };
 
-        connectSSE();
+        poll();
         return () => {
-            eventSourceRef.current?.close();
+            stopped = true;
+            clearTimeout(timer);
         };
     }, [onNotification]);
 

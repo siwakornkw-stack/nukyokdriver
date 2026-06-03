@@ -331,6 +331,29 @@ export function updateVehicleDriverService(data: Prisma.VehicleDriverUpdateInput
     data: data
   })
 }
+export function getDriversManaged(TenantId: string) {
+  return db.vehicleDriver.findMany({
+    where: { TenantId: TenantId, Status: 'active' },
+    orderBy: { CreatedAt: 'desc' },
+    select: {
+      VehicleDriverId: true,
+      Name: true,
+      MobileNo: true,
+      LicenseNo: true,
+      ImageUrl: true,
+      Status: true,
+      LineUserId: true,
+      CreatedAt: true,
+      _count: { select: { Vehicle: true, DriverJobs: true } }
+    }
+  })
+}
+export function deleteVehicleDriverService(VehicleDriverId: string, TenantId: string, username: string) {
+  return db.vehicleDriver.updateMany({
+    where: { VehicleDriverId: VehicleDriverId, TenantId: TenantId },
+    data: { Status: 'delete', UpdatedAt: new Date(), UpdatedByUsername: username }
+  })
+}
 export function addVehicleService(data: Prisma.VehicleCreateInput) {
   console.log('addVehicleService');
   return db.vehicle.create({
@@ -1015,6 +1038,65 @@ export async function deleteVehicleService(vehicleId: string, tenantId: string, 
     console.error('Error deleting vehicle:', error)
     return null
   }
+}
+
+const dedupNorm = (s: any): string => String(s ?? '').toLowerCase().replace(/[\s.\-_/]/g, '')
+const dedupPlateKey = (prefix: any, suffix: any, model: any): string =>
+  prefix || suffix ? `${dedupNorm(prefix)}|${dedupNorm(suffix)}` : `model:${dedupNorm(model)}`
+
+export async function findDuplicateVehicles(tenantId: string) {
+  const vehicles = await db.vehicle.findMany({
+    where: { TenantId: tenantId, Status: 'active' },
+    orderBy: { No: 'asc' },
+    include: {
+      VehicleType: true,
+      VehicleBrand: true,
+      VehicleDriver: true,
+    },
+  })
+
+  const groups = new Map<string, typeof vehicles>()
+  for (const v of vehicles) {
+    const key = dedupPlateKey(v.LicensePlatePrefix, v.LicensePlateSuffix, v.Model)
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(v)
+  }
+
+  return Array.from(groups.entries())
+    .filter(([, members]) => members.length > 1)
+    .map(([key, members]) => ({
+      key,
+      count: members.length,
+      vehicles: members.map((v) => ({
+        id: v.VehicleId,
+        no: v.No,
+        licensePlatePrefix: v.LicensePlatePrefix,
+        licensePlateSuffix: v.LicensePlateSuffix,
+        licensePlateProvince: v.LicensePlateProvince,
+        vehicleType: v.VehicleType?.Name || '',
+        brand: v.VehicleBrand?.Name || '',
+        model: v.Model,
+        driver: v.VehicleDriver?.Name || '',
+        createdAt: v.CreatedAt,
+        updatedAt: v.UpdatedAt,
+      })),
+    }))
+}
+
+export async function bulkSoftDeleteVehicles(vehicleIds: string[], tenantId: string, username: string) {
+  const result = await db.vehicle.updateMany({
+    where: {
+      VehicleId: { in: vehicleIds },
+      TenantId: tenantId,
+      Status: 'active',
+    },
+    data: {
+      Status: 'delete',
+      UpdatedAt: new Date(),
+      UpdatedByUsername: username,
+    },
+  })
+  return result.count
 }
 
 export async function deleteTypeDataByType(type: string, id: string, tenantId: string, username: string) {

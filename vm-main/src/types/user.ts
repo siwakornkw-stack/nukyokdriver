@@ -14,6 +14,7 @@ export interface User {
   MobileNo: string;
   LineId?: string;
   Email?: string;
+  Role?: string;
 }
 
 export interface CheckLineResponse {

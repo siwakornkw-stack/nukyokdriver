@@ -9,18 +9,23 @@ import { VehicleTable } from '@/components/dashboard/vehicle/vehicle-table';
 import { Plus as PlusIcon } from '@phosphor-icons/react/dist/ssr/Plus';
 import { Upload as UploadIcon } from '@phosphor-icons/react/dist/ssr/Upload';
 import { Download as DownloadIcon } from '@phosphor-icons/react/dist/ssr/Download';
+import { Copy as CopyIcon } from '@phosphor-icons/react/dist/ssr/Copy';
+import dynamic from 'next/dynamic';
 
 import '../../../../public/styles/modal.scss';
 import { TablePagination, useTheme } from '@mui/material';
-import VehicleFormModal from './VehicleFormModal';
-import VehicleInfoModal from './VehicleInfoModal';
 import type { ImportItemsStatus, ImportResponse, VehicleModel } from '@/types/vehicle';
 import { useEffect } from 'react';
 import { getVehicleAll, importVehicleCSV } from '../../../../services/vehicle.service';
 import { getResponseData } from '../../../../types/utils';
 import { useShareContext } from '@/contexts/share-context';
 import ShareSweetAlert from '@/components/ShareSweetAlert';
-import ModelUploadCsv from '@/components/core/ModelUploadCsv';
+
+// Heavy modals (x-data-grid-pro, x-date-pickers, swipeable-views) — lazy-load off the initial bundle.
+const VehicleInfoModal = dynamic(() => import('./VehicleInfoModal'), { ssr: false });
+const VehicleFormModal = dynamic(() => import('./VehicleFormModal'), { ssr: false });
+const DuplicateVehicleModal = dynamic(() => import('./DuplicateVehicleModal'), { ssr: false });
+const ModelUploadCsv = dynamic(() => import('@/components/core/ModelUploadCsv'), { ssr: false });
 
 
 function applyPagination(rows: VehicleModel[], page: number, rowsPerPage: number): VehicleModel[] {
@@ -62,6 +67,7 @@ export default function PageVehicle(): React.JSX.Element {
     
   ]);
   const [isUploading, setIsUploading] = React.useState(false);
+  const [dedupOpen, setDedupOpen] = React.useState(false);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -178,8 +184,14 @@ export default function PageVehicle(): React.JSX.Element {
   };
 
   const handleSearch = (value: string) => {
+    const q = value.trim().toLowerCase();
     const filteredVehicle = vehicle.filter((item) => {
-      return `${item.licensePlatePrefix} ${item.licensePlateSuffix} ${item.licensePlateProvince}`.includes(value) || item.brand.includes(value) || item.color.includes(value) || item.driver.includes(value);
+      const hay = [
+        item.licensePlatePrefix, item.licensePlateSuffix, item.licensePlateProvince,
+        item.brand, item.model, item.color, item.driver,
+        item.no, `Vehicle-${item.no?.toString().padStart(5, '0')}`,
+      ].map((s) => (s ?? '').toString().toLowerCase()).join(' ');
+      return hay.includes(q);
     });
     setVehicleSearch(filteredVehicle);
   };
@@ -213,13 +225,21 @@ export default function PageVehicle(): React.JSX.Element {
                 นำเข้า
               </Button>
             </label>
-            <Button 
-              startIcon={<DownloadIcon fontSize="var(--icon-fontSize-md)" />} 
+            <Button
+              startIcon={<DownloadIcon fontSize="var(--icon-fontSize-md)" />}
               variant="outlined"
               sx={{ mr: 2 }}
               onClick={() => window.open('/templates/vehicle_ยานพาหนะ.csv', '_blank')}
             >
               Template
+            </Button>
+            <Button
+              startIcon={<CopyIcon fontSize="var(--icon-fontSize-md)" />}
+              variant="outlined"
+              sx={{ mr: 2 }}
+              onClick={() => setDedupOpen(true)}
+            >
+              ข้อมูลซ้ำ
             </Button>
             <Button startIcon={<PlusIcon fontSize="var(--icon-fontSize-md)" />} variant="contained" onClick={handleOpen}>
               เพิ่ม
@@ -271,6 +291,12 @@ export default function PageVehicle(): React.JSX.Element {
           importResult={importResult}
           isUploading={isUploading}
           columns={importColumns}
+        />
+
+        <DuplicateVehicleModal
+          open={dedupOpen}
+          onClose={() => setDedupOpen(false)}
+          onDeleted={getVehicle}
         />
       </Stack>
     </React.Fragment>

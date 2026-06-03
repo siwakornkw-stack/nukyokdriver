@@ -6,8 +6,10 @@ export const paths = {
     account: '/dashboard/account',
     vehicle: '/dashboard/vehicle',
     vehicleEdit: '/dashboard/vehicle/edit',
+    driver: '/dashboard/driver',
     driverJobs: '/dashboard/driver-jobs',
     importData: '/dashboard/import',
+    dataAdmin: '/dashboard/data-admin',
 
     integrations: '/dashboard/integrations',
     admin: '/dashboard/settings/admin',

@@ -14,7 +14,8 @@
     "prisma:migrate": "npx prisma migrate dev",
     "prisma:generate": "npx prisma generate --schema prisma/schema.prisma",
     "postinstall": "prisma generate",
-    "test": "echo \"Error: no test specified\""
+    "test": "echo \"Error: no test specified\"",
+    "test:line": "ts-node --transpile-only src/routers/line/line.harness.ts"
   },
   "repository": {
     "type": "git",

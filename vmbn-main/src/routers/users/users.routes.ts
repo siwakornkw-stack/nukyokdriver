@@ -1,10 +1,16 @@
 import { Router } from 'express'
-import { requireUser } from '../middlewares'
+import { requireUser, requireRole } from '../middlewares'
 import * as UserController from './users.controllers'
 import multer from 'multer'
 import { blobStorage } from '../../utils/storage'
 
 const router = Router()
+
+// ===== User management (admin only) =====
+router.get('/manage', requireUser, requireRole('admin'), UserController.listUsers)
+router.post('/manage', requireUser, requireRole('admin'), UserController.createUserManaged)
+router.post('/manage/:id/role', requireUser, requireRole('admin'), UserController.updateUserRole)
+router.delete('/manage/:id', requireUser, requireRole('admin'), UserController.deactivateUser)
 
 router.get(
     '/',

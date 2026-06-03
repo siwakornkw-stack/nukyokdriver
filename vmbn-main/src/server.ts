@@ -10,7 +10,11 @@ import * as middlewares from './routers/middlewares'
 const app = express();
 app.set('trust proxy', true);
 app.use(cors());
-app.use(express.json());
+app.use(express.json({
+	verify: (req, _res, buf) => {
+		(req as any).rawBody = buf;
+	},
+}));
 app.use(cookieParser())
 app.use(middlewares.deserializeUser)
 

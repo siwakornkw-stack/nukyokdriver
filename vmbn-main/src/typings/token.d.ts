@@ -3,6 +3,7 @@ export interface ParsedToken {
     customerId: string
     username: string
     tenantId: string
+    role: string
     jti: string
 }
 

@@ -391,8 +391,8 @@ export async function getDailyIncomeForWeek(tenantId: string, year: number, week
 }
 
 export async function getIncomeVehicleFromDateRange(tenantId: string, start: Date, end: Date) {
-  return await db.incomeVehicle.findMany({ 
-    where: { Vehicle: { TenantId: tenantId }, CreatedAt: { gte: start, lte: end } },
+  return await db.incomeVehicle.findMany({
+    where: { Vehicle: { TenantId: tenantId }, DateTime: { gte: start, lte: end } },
     include: {
       Vehicle: true
     }
@@ -400,7 +400,15 @@ export async function getIncomeVehicleFromDateRange(tenantId: string, start: Dat
 }
 
 export async function getGasolineCostFromDateRange(tenantId: string, start: Date, end: Date) {
-  return await db.gasolineCost.findMany({ where: { Vehicle: { TenantId: tenantId }, CreatedAt: { gte: start, lte: end } },
+  return await db.gasolineCost.findMany({ where: { Vehicle: { TenantId: tenantId }, DateTime: { gte: start, lte: end } },
+    include: {
+      Vehicle: true
+    }
+  })
+}
+
+export async function getRepairVehicleFromDateRange(tenantId: string, start: Date, end: Date) {
+  return await db.repairVehicle.findMany({ where: { Vehicle: { TenantId: tenantId }, ReceiveDate: { gte: start, lte: end } },
     include: {
       Vehicle: true
     }

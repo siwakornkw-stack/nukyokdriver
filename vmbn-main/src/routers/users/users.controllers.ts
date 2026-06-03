@@ -1,7 +1,7 @@
 import { Response, Request, NextFunction } from 'express'
 import { IGetUserAuthInfoRequest } from "../../typings/express"
 import { ParsedToken } from '../../typings/token'
-import { findUserByIdMVC, checkLineService, updateUserService, updatePasswordService, verifyPasswordService } from './users.services'
+import { findUserByIdMVC, checkLineService, updateUserService, updatePasswordService, verifyPasswordService, listUsersService, createManagedUser, updateUserRoleService, deactivateUserService, USER_ROLES } from './users.services'
 import { MulterFile } from '../../typings/vehicle'
 
 export async function user(req: IGetUserAuthInfoRequest, res: Response, next: NextFunction) {
@@ -23,9 +23,10 @@ export async function user(req: IGetUserAuthInfoRequest, res: Response, next: Ne
       data: response
     })
   } catch (error: any) {
-    res.status(500).json({
+    const statusCode = res.statusCode !== 200 ? res.statusCode : 500
+    res.status(statusCode).json({
       success: false,
-      code: 500,
+      code: statusCode,
       message: error.message
     });
   }
@@ -57,9 +58,10 @@ export async function checkLine(
       data: responseData
     })
   } catch (error: any) {
-    res.status(500).json({
+    const statusCode = res.statusCode !== 200 ? res.statusCode : 500
+    res.status(statusCode).json({
       success: false,
-      code: 500,
+      code: statusCode,
       message: error.message
     });
   }
@@ -87,9 +89,10 @@ export async function uploadImageUser(req: IGetUserAuthInfoRequest, res: Respons
     })
   } catch (error: any) {
     console.error('Error in uploadImageUser:', error);
-    res.status(500).json({
+    const statusCode = res.statusCode !== 200 ? res.statusCode : 500
+    res.status(statusCode).json({
       success: false,
-      code: 500,
+      code: statusCode,
       message: error.message
     });
   }
@@ -119,9 +122,10 @@ export async function updateUser(req: IGetUserAuthInfoRequest, res: Response, ne
       message: 'success'
     })
   } catch (error: any) {
-    res.status(500).json({
+    const statusCode = res.statusCode !== 200 ? res.statusCode : 500
+    res.status(statusCode).json({
       success: false,
-      code: 500,
+      code: statusCode,
       message: error.message
     });
   }
@@ -170,10 +174,110 @@ export async function updatePassword(req: IGetUserAuthInfoRequest, res: Response
       message: 'อัปเดตรหัสผ่านสำเร็จ'
     })
   } catch (error: any) {
-    res.status(500).json({
+    const statusCode = res.statusCode !== 200 ? res.statusCode : 500
+    res.status(statusCode).json({
       success: false,
-      code: 500,
+      code: statusCode,
       message: error.message
     });
+  }
+}
+
+export async function listUsers(req: IGetUserAuthInfoRequest, res: Response, next: NextFunction) {
+  try {
+    const parsedToken: ParsedToken | undefined = req.parsedToken
+    if (!parsedToken) throw new Error('Unauthorized')
+
+    const users = await listUsersService(parsedToken.tenantId)
+
+    res.json({ success: true, code: 200, message: 'success', data: users })
+  } catch (error: any) {
+    const statusCode = res.statusCode !== 200 ? res.statusCode : 500
+    res.status(statusCode).json({ success: false, code: statusCode, message: error.message })
+  }
+}
+
+export async function createUserManaged(req: IGetUserAuthInfoRequest, res: Response, next: NextFunction) {
+  try {
+    const parsedToken: ParsedToken | undefined = req.parsedToken
+    if (!parsedToken) throw new Error('Unauthorized')
+
+    const { name, username, password, mobileNo, email, role } = req.body
+    if (!username || !password || !mobileNo) {
+      res.status(400)
+      throw new Error('username, password, เบอร์โทร จำเป็น')
+    }
+    if (!USER_ROLES.includes(role)) {
+      res.status(400)
+      throw new Error('role ไม่ถูกต้อง')
+    }
+    if (String(password).length < 6) {
+      res.status(400)
+      throw new Error('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร')
+    }
+
+    const created = await createManagedUser(
+      parsedToken.tenantId,
+      { name, username, password, mobileNo, email, role },
+      parsedToken.username
+    )
+
+    res.json({ success: true, code: 200, message: 'เพิ่มผู้ใช้สำเร็จ', data: created })
+  } catch (error: any) {
+    const statusCode = res.statusCode !== 200 ? res.statusCode : 500
+    res.status(statusCode).json({ success: false, code: statusCode, message: error.message })
+  }
+}
+
+export async function updateUserRole(req: IGetUserAuthInfoRequest, res: Response, next: NextFunction) {
+  try {
+    const parsedToken: ParsedToken | undefined = req.parsedToken
+    if (!parsedToken) throw new Error('Unauthorized')
+
+    const { id } = req.params
+    const { role } = req.body
+    if (!id) {
+      res.status(400)
+      throw new Error('กรุณาระบุ id')
+    }
+    if (!USER_ROLES.includes(role)) {
+      res.status(400)
+      throw new Error('role ไม่ถูกต้อง')
+    }
+    if (id === parsedToken.customerId) {
+      res.status(400)
+      throw new Error('ไม่สามารถเปลี่ยน role ของตัวเองได้')
+    }
+
+    const updated = await updateUserRoleService(id, parsedToken.tenantId, role, parsedToken.username)
+
+    res.json({ success: true, code: 200, message: 'อัปเดต role สำเร็จ', data: updated })
+  } catch (error: any) {
+    const statusCode = res.statusCode !== 200 ? res.statusCode : 500
+    res.status(statusCode).json({ success: false, code: statusCode, message: error.message })
+  }
+}
+
+export async function deactivateUser(req: IGetUserAuthInfoRequest, res: Response, next: NextFunction) {
+  try {
+    const parsedToken: ParsedToken | undefined = req.parsedToken
+    if (!parsedToken) throw new Error('Unauthorized')
+
+    const { id } = req.params
+    if (!id) {
+      res.status(400)
+      throw new Error('กรุณาระบุ id')
+    }
+    if (id === parsedToken.customerId) {
+      res.status(400)
+      throw new Error('ไม่สามารถปิดบัญชีของตัวเองได้')
+    }
+
+    const result = await deactivateUserService(id, parsedToken.tenantId, parsedToken.username)
+
+    res.json({ success: true, code: 200, message: 'ปิดบัญชีผู้ใช้สำเร็จ', data: result })
+  } catch (error: any) {
+    const statusCode = res.statusCode !== 200 ? res.statusCode : 500
+    res.status(statusCode).json({ success: false, code: statusCode, message: error.message })
   }
 }

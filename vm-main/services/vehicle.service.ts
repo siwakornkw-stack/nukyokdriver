@@ -1813,3 +1813,216 @@ export async function getNotification(): Promise<WrapResponse<NotificationRespon
         return wrapResponse({ status: 500, message: errorWrapper(error, 'getNotification') });
     }
 }
+
+export interface DuplicateVehicleItem {
+    id: string;
+    no: number;
+    licensePlatePrefix: string;
+    licensePlateSuffix: string;
+    licensePlateProvince: string;
+    vehicleType: string;
+    brand: string;
+    model: string;
+    driver: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface DuplicateVehicleGroup {
+    key: string;
+    count: number;
+    vehicles: DuplicateVehicleItem[];
+}
+
+export interface DuplicateVehiclesResponse {
+    success: boolean;
+    code: number;
+    message: string;
+    data: DuplicateVehicleGroup[];
+}
+
+export async function getDuplicateVehicles(): Promise<WrapResponse<DuplicateVehiclesResponse | null>> {
+    try {
+        const accessToken = Cookies.get('access_token');
+        if (!accessToken)
+            return wrapResponse({ status: 401, message: 'Unauthorized' });
+        const domain = getDomain();
+        if (!domain)
+            return wrapResponse({ status: 401, message: 'Unauthorized' });
+
+        const response = await fetch(`${urlApi}/vehicle/duplicates`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-domain': domain,
+                'Authorization': `Bearer ${accessToken}`
+            }
+        });
+
+        const result = await wrapResponse<DuplicateVehiclesResponse>(response);
+
+        return result;
+    } catch (error: unknown) {
+        return wrapResponse({ status: 500, message: errorWrapper(error, 'getDuplicateVehicles') });
+    }
+}
+
+export async function bulkDeleteVehicles(ids: string[]): Promise<WrapResponse<ApiResponse>> {
+    try {
+        const accessToken = Cookies.get('access_token');
+        if (!accessToken)
+            return wrapResponse({ status: 401, message: 'Unauthorized' });
+        const domain = getDomain();
+        if (!domain)
+            return wrapResponse({ status: 401, message: 'Unauthorized' });
+
+        const response = await fetch(`${urlApi}/vehicle/duplicates/delete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-domain': domain,
+                'Authorization': `Bearer ${accessToken}`
+            },
+            body: JSON.stringify({ ids })
+        });
+
+        const result = await wrapResponse<ApiResponse>(response);
+
+        return result;
+    } catch (error: unknown) {
+        return wrapResponse({ status: 500, message: errorWrapper(error, 'bulkDeleteVehicles') });
+    }
+}
+
+export interface ManagedDriver {
+    id: string;
+    name: string;
+    mobileNo: string;
+    licenseNo: string;
+    imageUrl: string;
+    status: string;
+    lineUserId: string;
+    vehicleCount: number;
+    jobCount: number;
+    createdAt: string;
+}
+
+export interface ManagedDriversResponse {
+    success: boolean;
+    code: number;
+    message: string;
+    data: ManagedDriver[];
+}
+
+export interface DriverInput {
+    name: string;
+    mobileNo?: string;
+    licenseNo?: string;
+    imageUrl?: string;
+}
+
+export async function getDriversManaged(): Promise<WrapResponse<ManagedDriversResponse | null>> {
+    try {
+        const accessToken = Cookies.get('access_token');
+        if (!accessToken)
+            return wrapResponse({ status: 401, message: 'Unauthorized' });
+        const domain = getDomain();
+        if (!domain)
+            return wrapResponse({ status: 401, message: 'Unauthorized' });
+
+        const response = await fetch(`${urlApi}/vehicle/vehicle-driver/manage`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-domain': domain,
+                'Authorization': `Bearer ${accessToken}`
+            }
+        });
+
+        const result = await wrapResponse<ManagedDriversResponse>(response);
+
+        return result;
+    } catch (error: unknown) {
+        return wrapResponse({ status: 500, message: errorWrapper(error, 'getDriversManaged') });
+    }
+}
+
+export async function addDriverManaged(data: DriverInput): Promise<WrapResponse<ApiResponse>> {
+    try {
+        const accessToken = Cookies.get('access_token');
+        if (!accessToken)
+            return wrapResponse({ status: 401, message: 'Unauthorized' });
+        const domain = getDomain();
+        if (!domain)
+            return wrapResponse({ status: 401, message: 'Unauthorized' });
+
+        const response = await fetch(`${urlApi}/vehicle/vehicle-driver/add`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-domain': domain,
+                'Authorization': `Bearer ${accessToken}`
+            },
+            body: JSON.stringify(data)
+        });
+
+        const result = await wrapResponse<ApiResponse>(response);
+
+        return result;
+    } catch (error: unknown) {
+        return wrapResponse({ status: 500, message: errorWrapper(error, 'addDriverManaged') });
+    }
+}
+
+export async function updateDriverManaged(data: DriverInput, id: string): Promise<WrapResponse<ApiResponse>> {
+    try {
+        const accessToken = Cookies.get('access_token');
+        if (!accessToken)
+            return wrapResponse({ status: 401, message: 'Unauthorized' });
+        const domain = getDomain();
+        if (!domain)
+            return wrapResponse({ status: 401, message: 'Unauthorized' });
+
+        const response = await fetch(`${urlApi}/vehicle/vehicle-driver/update/${id}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-domain': domain,
+                'Authorization': `Bearer ${accessToken}`
+            },
+            body: JSON.stringify(data)
+        });
+
+        const result = await wrapResponse<ApiResponse>(response);
+
+        return result;
+    } catch (error: unknown) {
+        return wrapResponse({ status: 500, message: errorWrapper(error, 'updateDriverManaged') });
+    }
+}
+
+export async function deleteDriverManaged(id: string): Promise<WrapResponse<ApiResponse>> {
+    try {
+        const accessToken = Cookies.get('access_token');
+        if (!accessToken)
+            return wrapResponse({ status: 401, message: 'Unauthorized' });
+        const domain = getDomain();
+        if (!domain)
+            return wrapResponse({ status: 401, message: 'Unauthorized' });
+
+        const response = await fetch(`${urlApi}/vehicle/vehicle-driver/delete/${id}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-domain': domain,
+                'Authorization': `Bearer ${accessToken}`
+            }
+        });
+
+        const result = await wrapResponse<ApiResponse>(response);
+
+        return result;
+    } catch (error: unknown) {
+        return wrapResponse({ status: 500, message: errorWrapper(error, 'deleteDriverManaged') });
+    }
+}

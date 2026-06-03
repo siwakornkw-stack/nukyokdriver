@@ -9,9 +9,8 @@ import typeRouters from './type/type.routes';
 import settingRouters from './settings/setting.routes';
 import driverJobRouters from './driverjob/driverjob.routes';
 import importDataRouters from './importdata/importdata.routes';
-import { connectSSE, sendMessage } from './sse/sse.controllers';
-import { requireUserSSE } from './middlewares';
-//import { sseService } from '../services/sse.service';
+import notificationRouters from './notification/notification.routes';
+import dataAdminRouters from './dataadmin/dataadmin.routes';
 
 const API_URL = process.env.API_URL || ''
 
@@ -38,21 +37,7 @@ routers.use(API_URL + '/type', typeRouters);
 routers.use(API_URL + '/settings', settingRouters);
 routers.use(API_URL + '/driver-job', driverJobRouters);
 routers.use(API_URL + '/import', importDataRouters);
-
-// SSE Routes
-routers.get(API_URL + '/sse/connect', requireUserSSE, connectSSE);
-routers.post(API_URL + '/sse/send', requireUserSSE, sendMessage);
-
-/* routers.get(API_URL + '/sse/test', (req, res) => {
-    sseService.sendMessage('47635c8e-3497-4cf7-8aa4-ccfc2bc62e58', {
-        type: 'notification',
-        data: {
-            title: 'ยืนยันการสมัครสมาชิก',
-            message: 'ยืนยันการสมัครสมาชิกสำเร็จ',
-            timestamp: new Date()
-        }
-    })
-    res.send('Hello World');
-}); */
+routers.use(API_URL + '/notification', notificationRouters);
+routers.use(API_URL + '/data-admin', dataAdminRouters);
 
 export default routers;

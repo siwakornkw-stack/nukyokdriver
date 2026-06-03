@@ -18,9 +18,9 @@ export function errorHandler(
   err: Error,
   req: Request,
   res: Response<ErrorResponse>,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   next: NextFunction
 ) {
+  if (res.headersSent) return next(err)
   const statusCode = res.statusCode !== 200 ? res.statusCode : 500
   res.status(statusCode)
   res.json({
@@ -45,7 +45,7 @@ export function validateRequest(validators: RequestValidators) {
       next()
     } catch (error) {
       if (error instanceof ZodError) {
-        res.status(400).json({
+        return res.status(400).json({
           message: error.errors[0].message
         });
       }
@@ -101,6 +101,29 @@ export async function requireUser(req: IGetUserAuthInfoRequest, res: Response, n
   }
 }
 
+// Must run after requireUser. Legacy tokens without a role are treated as 'admin'
+// so existing sessions are not locked out before they refresh.
+export function requireRole(...allowed: string[]) {
+  return (req: IGetUserAuthInfoRequest, res: Response, next: NextFunction) => {
+    const role = req.parsedToken?.role ?? 'admin'
+    if (!allowed.includes(role)) {
+      res.status(403)
+      return next(new Error('ไม่มีสิทธิ์เข้าถึงเมนูนี้'))
+    }
+    next()
+  }
+}
+
+// Blocks write actions for read-only (viewer) users.
+export function requireWrite(req: IGetUserAuthInfoRequest, res: Response, next: NextFunction) {
+  const role = req.parsedToken?.role ?? 'admin'
+  if (role === 'viewer') {
+    res.status(403)
+    return next(new Error('บัญชีนี้เป็นแบบดูอย่างเดียว ไม่สามารถแก้ไขข้อมูลได้'))
+  }
+  next()
+}
+
 export async function requireUserAdmin(req: IGetUserAuthInfoRequestAdmin, res: Response, next: NextFunction) {
   try {
     const accessToken = (req.headers.authorization || '').replace(
@@ -126,37 +149,6 @@ export async function requireUserAdmin(req: IGetUserAuthInfoRequestAdmin, res: R
     next(error)
   }
 }
-
-export async function requireUserSSE(req: IGetUserAuthInfoRequest, res: Response, next: NextFunction) {
-  try {
-    const token = req.query.token as string;
-    if (!token) {
-      res.status(401);
-      throw new Error('Token is required');
-    }
-
-
-    const payload = verifyAccessToken(token) as ParsedToken;
-    req.parsedToken = payload;
-    const parsedToken = req.parsedToken;    
-    
-    if (!parsedToken || !parsedToken.customerId || !parsedToken.jti) {
-      res.status(401);
-      throw new Error('Unauthorized.');
-    }
-
-    const savedRefreshToken = await findRefreshTokenById(parsedToken.jti);
-    if (!savedRefreshToken || savedRefreshToken.Revoked === true) {
-      res.status(401);
-      throw new Error('Unauthorized');
-    }
-
-    next();
-  } catch (error) {
-    next(error);
-  }
-}
-
 
 export async function GetTenantId(req: IGetRequestTenant, res: Response, next: NextFunction) {
   try {

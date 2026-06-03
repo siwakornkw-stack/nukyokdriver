@@ -20,6 +20,31 @@ export interface ImportResponse {
   results?: ImportSheetResult[];
 }
 
+export type AiStatus = 'ok' | 'quota' | 'unavailable' | 'no_key' | 'error';
+
+export interface AiProviderHealth {
+  name: string;
+  status: AiStatus;
+  httpCode?: number;
+}
+
+export interface AiStatusResponse {
+  success: boolean;
+  status: AiStatus;
+  message: string;
+  providers?: AiProviderHealth[];
+}
+
+export async function checkAiStatus(): Promise<AiStatusResponse> {
+  const res = await fetch(`${urlApi}/import/ai-status`, {
+    headers: {
+      'x-domain': getDomain(),
+      Authorization: `Bearer ${Cookies.get('access_token') ?? ''}`,
+    },
+  });
+  return res.json();
+}
+
 export async function importAuto(file: File): Promise<ImportResponse> {
   const form = new FormData();
   form.append('file', file);

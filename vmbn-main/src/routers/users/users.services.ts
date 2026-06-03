@@ -29,11 +29,6 @@ export function updateUserLogin(data: UpdateUserLogin) {
   const dateNow = new Date();
   return db.customer.update({
     data: {
-      RefreshTokens: {
-        connect: {
-          RefreshTokenId: data.RefreshTokensId
-        }
-      },
       IsOnline: true,
       LatestOnline: dateNow,
       LatestLogin: dateNow,
@@ -65,6 +60,7 @@ export function findUserByIdMVC(CustomerId: Customer['CustomerId']) {
       MobileNo: true,
       LineId: true,
       Email: true,
+      Role: true,
     }
   })
 }
@@ -105,6 +101,82 @@ export function updatePasswordService(CustomerId: string, TenantId: string, newP
       CustomerId: CustomerId,
       TenantId: TenantId
     }
+  })
+}
+
+export const USER_ROLES = ['admin', 'staff', 'viewer'] as const
+export type UserRole = (typeof USER_ROLES)[number]
+
+export function listUsersService(TenantId: string) {
+  return db.customer.findMany({
+    where: {
+      TenantId: TenantId,
+      Status: { not: 'delete' }
+    },
+    orderBy: { CreatedTime: 'asc' },
+    select: {
+      CustomerId: true,
+      Name: true,
+      Username: true,
+      Email: true,
+      MobileNo: true,
+      Role: true,
+      Status: true,
+      ImageUrl: true,
+      LatestLogin: true,
+      CreatedTime: true
+    }
+  })
+}
+
+export async function createManagedUser(
+  TenantId: string,
+  input: { name?: string; username: string; password: string; mobileNo: string; email?: string; role: string },
+  createdByUsername: string
+) {
+  const existing = await findUserByUsername(TenantId, input.username)
+  if (existing) throw new Error('username นี้ถูกใช้แล้ว')
+
+  const passwordHash = bcrypt.hashSync(input.password, 12)
+  return db.customer.create({
+    data: {
+      Tenant: { connect: { TenantId } },
+      Status: 'active',
+      Role: input.role,
+      Name: input.name,
+      Username: input.username,
+      Password: passwordHash,
+      PasswordHash: passwordHash,
+      MobileNo: input.mobileNo,
+      Email: input.email,
+      LatestIpAddress: '0.0.0.0',
+      CreatedByUsername: createdByUsername
+    },
+    select: {
+      CustomerId: true,
+      Name: true,
+      Username: true,
+      Email: true,
+      MobileNo: true,
+      Role: true,
+      Status: true
+    }
+  })
+}
+
+export function updateUserRoleService(CustomerId: string, TenantId: string, role: string, updatedByUsername: string) {
+  return db.customer.update({
+    where: { CustomerId, TenantId },
+    data: { Role: role, UpdatedByUsername: updatedByUsername },
+    select: { CustomerId: true, Username: true, Role: true }
+  })
+}
+
+export function deactivateUserService(CustomerId: string, TenantId: string, updatedByUsername: string) {
+  return db.customer.update({
+    where: { CustomerId, TenantId },
+    data: { Status: 'delete', DeletedByUsername: updatedByUsername, DeletedTime: new Date() },
+    select: { CustomerId: true, Status: true }
   })
 }
 

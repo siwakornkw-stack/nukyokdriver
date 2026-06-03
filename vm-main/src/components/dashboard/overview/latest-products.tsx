@@ -42,11 +42,29 @@ export function LatestProducts({ products = [], sx }: LatestProductsProps): Reac
       <CardHeader title="รายงานยานพาหนะล่าสุด" />
       <Divider />
       <List>
+        {products.length === 0 ? (
+          <ListItem>
+            <ListItemText
+              primary="ยังไม่มีข้อมูลยานพาหนะ"
+              secondary="ยานพาหนะที่อัพเดทล่าสุดจะแสดงที่นี่"
+              primaryTypographyProps={{ variant: 'body2', color: 'text.secondary', align: 'center' }}
+              secondaryTypographyProps={{ variant: 'caption', align: 'center' }}
+            />
+          </ListItem>
+        ) : null}
         {products.slice(0,5).map((product, index) => (
           <ListItem divider={index < products.length - 1} key={product.id}>
             <ListItemAvatar>
               {product.img ? (
-                <Box component="img" src={product.img ? `${urlImage}${product.img}` : '/assets/logo.png'} sx={{ borderRadius: 1, height: '48px', width: '48px' }} />
+                <Box
+                  component="img"
+                  loading="lazy"
+                  alt={product.licensePlatePrefix + ' ' + product.licensePlateSuffix}
+                  width={48}
+                  height={48}
+                  src={product.img ? `${urlImage}${product.img}` : '/assets/logo.png'}
+                  sx={{ borderRadius: 1, height: '48px', width: '48px', objectFit: 'cover' }}
+                />
               ) : (
                 <Box
                   sx={{
