@@ -20,6 +20,12 @@ const str = (v: any): string => (v === undefined || v === null ? '' : String(v).
 const int0 = (v: any): number => { const n = parseInt(str(v).replace(/[^0-9.-]/g, ''), 10); return isNaN(n) ? 0 : n }
 const decOrZero = (v: any): Prisma.Decimal => { const s = str(v).replace(/[^0-9.]/g, ''); return s && !isNaN(parseFloat(s)) ? new Prisma.Decimal(s) : new Prisma.Decimal(0) }
 
+// ---------- dedup key normalizers ----------
+// Stable string parts so a fetched DB row and a to-be-created record produce the
+// same key. Dates -> epoch ms; decimals -> fixed(2) so "7470" == Decimal "7470.00".
+const kdate = (v: any): string => (v instanceof Date && !isNaN(v.getTime()) ? String(v.getTime()) : '')
+const kdec = (v: any): string => { const n = Number(v); return isNaN(n) ? '' : n.toFixed(2) }
+
 const excelSerialToDate = (n: number): Date | null => {
   const d = new Date(Math.round((n - 25569) * 86400 * 1000))
   return isNaN(d.getTime()) ? null : d
@@ -82,9 +88,9 @@ const SYNONYMS: Record<string, string[]> = {
   premium: ['ค่าเบี้ย', 'เบี้ยประกัน', 'ค่าเบี้ยรวม', 'เบี้ยรวม', 'ค่าเบี้ยประกัน', 'totalpremium'],
   compulsoryEnd: ['พรบยาว', 'พรบ', 'พรบหมด', 'พ.ร.บ.'],
   taxEnd: ['ภาษีสั้น', 'ภาษี', 'ภาษีหมด'],
-  // job columns
-  origin: ['ต้นทาง', 'จุดรับ', 'origin'],
-  destination: ['ปลายทาง', 'จุดส่ง', 'หน้างาน', 'destination'],
+  // job columns (driver dispatch via LINE)
+  origin: ['เนื้อหางาน', 'เนื้องาน', 'ต้นทาง', 'จุดรับ', 'origin'],
+  destination: ['จุดหมายปลายทาง', 'จุดหมาย', 'ปลายทาง', 'จุดส่ง', 'หน้างาน', 'แผนที่', 'googlemap', 'destination'],
   scheduledAt: ['วันเวลา', 'เวลา', 'วันที่', 'scheduledat'],
   // per-vehicle sub-data columns
   repairDate: ['วันที่ซ่อม', 'วันซ่อม'],
@@ -195,6 +201,26 @@ async function ensureRef(model: string, idField: string, tenantId: string, name:
 const plateKey = (prefix: string, suffix: string, model: string): string =>
   prefix || suffix ? `${norm(prefix)}|${norm(suffix)}` : `model:${norm(model)}`
 
+// Plate-less machines are keyed by model name (e.g. "CAT 313 GC"). The same
+// machine is often written at different specificity ("CAT 313" vs "CAT 313 GC"),
+// so exact key match misses it. Tokenize the model and treat one as the same
+// vehicle when its tokens are a leading subset of the other's.
+const modelToks = (model: string): string[] =>
+  str(model).toLowerCase().split(/[\s.\-_/]+/).map((t) => t.replace(/[^a-z0-9ก-๙]/g, '')).filter(Boolean)
+const toksPrefix = (a: string[], b: string[]): boolean => a.length <= b.length && a.every((t, i) => b[i] === t)
+// Find the most specific (longest-token) model-only vehicle matching `model`.
+const matchModelId = (idx: { toks: string[]; id: string }[], model: string): string | null => {
+  const toks = modelToks(model)
+  if (!toks.length) return null
+  let best: { toks: string[]; id: string } | null = null
+  for (const e of idx) {
+    if (toksPrefix(toks, e.toks) || toksPrefix(e.toks, toks)) {
+      if (!best || e.toks.length > best.toks.length) best = e
+    }
+  }
+  return best ? best.id : null
+}
+
 const ZERO = new Prisma.Decimal(0)
 
 interface SubBatches {
@@ -259,9 +285,11 @@ async function importVehicles(tenantId: string, username: string | undefined, ro
   ])
   const existing = await db.vehicle.findMany({ where: { TenantId: tenantId }, select: { VehicleId: true, LicensePlatePrefix: true, LicensePlateSuffix: true, Model: true } })
   const vmap = new Map<string, string>()
+  const modelIdx: { toks: string[]; id: string }[] = []
   for (const v of existing) {
     const k = plateKey(v.LicensePlatePrefix, v.LicensePlateSuffix, v.Model)
     if (!vmap.has(k)) vmap.set(k, v.VehicleId)
+    if (k.startsWith('model:')) { const toks = modelToks(v.Model ?? ''); if (toks.length) modelIdx.push({ toks, id: v.VehicleId }) }
   }
 
   // Preload existing insurance/tax records (only if this sheet carries them) so
@@ -304,7 +332,10 @@ async function importVehicles(tenantId: string, username: string | undefined, ro
       const instDec = instAmount && /\d/.test(instAmount) ? new Prisma.Decimal(instAmount.replace(/[^0-9.]/g, '') || '0') : null
 
       const key = plateKey(prefix, suffix, model)
-      const existingId = vmap.get(key)
+      const isModelKey = key.startsWith('model:')
+      let existingId = vmap.get(key)
+      let fuzzy = false
+      if (!existingId && isModelKey) { const m = matchModelId(modelIdx, model); if (m) { existingId = m; fuzzy = true } }
 
       if (existingId) {
         const upd: Prisma.VehicleUpdateInput = { UpdatedByUsername: username ?? 'import' }
@@ -312,7 +343,9 @@ async function importVehicles(tenantId: string, username: string | undefined, ro
         if (brandId) upd.VehicleBrand = { connect: { VehicleBrandId: brandId } }
         if (driverId) upd.VehicleDriver = { connect: { VehicleDriverId: driverId } }
         if (statusId) upd.VehicleStatus = { connect: { VehicleStatusId: statusId } }
-        if (model) upd.Model = model
+        // On a fuzzy model match keep the existing (richer) name, e.g. don't let
+        // a row "CAT 313" overwrite an existing "CAT 313 GC".
+        if (model && !fuzzy) upd.Model = model
         if (regDate) upd.RegistrationDate = regDate
         if (note) upd.Note = note
         if (instDec) upd.InstallmentAmount = instDec
@@ -361,9 +394,17 @@ async function importVehicles(tenantId: string, username: string | undefined, ro
   return { created, updated, sub, skipped, errors }
 }
 
+// Import driver-dispatch jobs (สั่งงานคนขับผ่าน LINE). The new dispatch model
+// keys a job on its content (เนื้อหางาน -> Origin); destination is an optional
+// map link and a driver is optional. With a driver the job is 'pending' (a
+// dispatcher still re-sends the LINE card from the page); without one it stays
+// 'unassigned' for a driver to be picked later. No LINE push happens on import.
 async function importJobs(tenantId: string, username: string | undefined, rows: any[][], colMap: Record<string, number>): Promise<Omit<SheetResult, 'sheet' | 'type'>> {
   let created = 0, skipped = 0
   const errors: string[] = []
+  const last = await db.driverJob.findFirst({ where: { TenantId: tenantId, JobNo: { not: null } }, orderBy: { JobNo: 'desc' }, select: { JobNo: true } })
+  let jobNo = (last?.JobNo ?? 0) + 1
+  const driverCache = new Map<string, string | null>()
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]
     const origin = str(cell(row, colMap, 'origin'))
@@ -371,15 +412,19 @@ async function importJobs(tenantId: string, username: string | undefined, rows: 
     const driverName = str(cell(row, colMap, 'driver'))
     try {
       if (!origin && !destination && !driverName) { skipped++; continue }
-      if (!driverName || !destination) throw new Error('ต้องมีคนขับและปลายทาง')
-      const driverId = await getOrCreateRef('vehicleDriver', 'VehicleDriverId', tenantId, driverName, username)
+      if (!origin) throw new Error('ต้องมีเนื้อหางาน')
+      let driverId: string | null = null
+      if (driverName) {
+        if (driverCache.has(driverName)) driverId = driverCache.get(driverName) as string | null
+        else { driverId = await getOrCreateRef('vehicleDriver', 'VehicleDriverId', tenantId, driverName, username); driverCache.set(driverName, driverId) }
+      }
       await db.driverJob.create({
         data: {
-          TenantId: tenantId, VehicleDriverId: driverId as string,
-          Origin: origin || '-', Destination: destination,
+          TenantId: tenantId, JobNo: jobNo++, VehicleDriverId: driverId,
+          Origin: origin, Destination: destination || '-',
           ScheduledAt: dateOrNull(cell(row, colMap, 'scheduledAt')),
           Note: str(cell(row, colMap, 'note')) || null,
-          Status: 'pending', CreatedByUsername: username ?? 'import',
+          Status: driverId ? 'pending' : 'unassigned', CreatedByUsername: username ?? 'import',
         },
       })
       created++
@@ -391,94 +436,183 @@ async function importJobs(tenantId: string, username: string | undefined, rows: 
 }
 
 // ---------- per-vehicle sub-data importers (match existing vehicle by plate) ----------
-async function loadVehicleMap(tenantId: string): Promise<Map<string, string>> {
+interface VehicleMap { exact: Map<string, string>; models: { toks: string[]; id: string }[] }
+async function loadVehicleMap(tenantId: string): Promise<VehicleMap> {
   const ex = await db.vehicle.findMany({ where: { TenantId: tenantId }, select: { VehicleId: true, LicensePlatePrefix: true, LicensePlateSuffix: true, Model: true } })
-  const m = new Map<string, string>()
-  for (const v of ex) { const k = plateKey(v.LicensePlatePrefix, v.LicensePlateSuffix, v.Model); if (!m.has(k)) m.set(k, v.VehicleId) }
-  return m
+  const exact = new Map<string, string>()
+  const models: { toks: string[]; id: string }[] = []
+  for (const v of ex) {
+    const k = plateKey(v.LicensePlatePrefix, v.LicensePlateSuffix, v.Model)
+    if (!exact.has(k)) exact.set(k, v.VehicleId)
+    if (k.startsWith('model:')) { const toks = modelToks(v.Model ?? ''); if (toks.length) models.push({ toks, id: v.VehicleId }) }
+  }
+  return { exact, models }
 }
-function rowVehicleId(row: any[], colMap: Record<string, number>, vmap: Map<string, string>): string | null {
+function rowVehicleId(row: any[], colMap: Record<string, number>, vmap: VehicleMap): string | null {
   let prefix = str(cell(row, colMap, 'license'))
   let suffix = str(cell(row, colMap, 'licenseSuffix'))
   if (!suffix) { const p = parseLicense(prefix); prefix = p.prefix; suffix = p.suffix }
   const model = str(cell(row, colMap, 'model'))
   if (!prefix && !suffix && !model) return null
-  return vmap.get(plateKey(prefix, suffix, model)) ?? null
+  const key = plateKey(prefix, suffix, model)
+  const hit = vmap.exact.get(key)
+  if (hit) return hit
+  if (key.startsWith('model:')) return matchModelId(vmap.models, model)
+  return null
 }
 type CatResult = Omit<SheetResult, 'sheet' | 'type'>
 
+// For workbooks that put one vehicle per sheet (no plate column in the rows),
+// resolve the vehicle from the sheet name: match an existing vehicle (plate or
+// fuzzy model), otherwise create a minimal record so the sheet's data isn't lost.
+async function resolveSheetVehicle(tenantId: string, username: string | undefined, sheetName: string, vmap: VehicleMap): Promise<string | null> {
+  const name = str(sheetName)
+  if (!name) return null
+  let id = vmap.exact.get(plateKey('', '', name)) ?? matchModelId(vmap.models, name)
+  let prefix = '', suffix = '', province = ''
+  if (!id) {
+    const p = parseLicense(name)
+    if (p.suffix) { prefix = p.prefix; suffix = p.suffix; province = p.province; id = vmap.exact.get(plateKey(prefix, suffix, '')) ?? null }
+  }
+  if (id) return id
+  const model = prefix || suffix ? '' : name
+  const created = await db.vehicle.create({
+    data: {
+      TenantId: tenantId, Status: 'active',
+      LicensePlatePrefix: prefix, LicensePlateSuffix: suffix, LicensePlateProvince: province,
+      VehicleTypeId: null, VehicleCharacteristic: '', VehicleBrandId: null,
+      Model: model, Generation: '', Color: '', ChassisNumber: '', EngineNumber: '', EngineBrand: '',
+      TankSize: 0, FuelConsumption: 0, CylinderCount: 0, Cylinder: 0,
+      VehicleSize: '', CargoSize: '', GasSerialNumber: '',
+      VehicleWeight: 0, CargoWeight: 0, WheelCount: 0, SeatCount: 0,
+      RegistrationDate: null, Age: '', Ownership: '',
+      VehicleDriverId: null, VehicleStatusId: null,
+      InstallmentAmount: null, Note: null,
+      CreatedByUsername: username ?? 'import', UpdatedByUsername: username ?? 'import',
+    }, select: { VehicleId: true },
+  })
+  const key = plateKey(prefix, suffix, model)
+  vmap.exact.set(key, created.VehicleId)
+  if (key.startsWith('model:')) { const toks = modelToks(model); if (toks.length) vmap.models.push({ toks, id: created.VehicleId }) }
+  return created.VehicleId
+}
+
 // Generic runner: build a record per row (or null to skip), then bulk-create.
-async function importCategory<T>(
-  tenantId: string, rows: any[][], colMap: Record<string, number>,
+async function importCategory<T extends { VehicleId: string }>(
+  tenantId: string, username: string | undefined, sheetName: string,
+  rows: any[][], colMap: Record<string, number>,
   build: (row: any[], vid: string) => T | null,
   create: (data: T[]) => Promise<unknown>,
+  // Skip rows that already exist. `load` fetches existing rows for the involved
+  // vehicles; `keyOf` builds the same natural key from both a DB row and a
+  // to-create record. Without this, re-uploading the same file double-inserts.
+  dedup: { keyOf: (rec: any) => string; load: (vehicleIds: string[]) => Promise<any[]> },
 ): Promise<CatResult> {
   const vmap = await loadVehicleMap(tenantId)
+  // When rows carry no vehicle identity, the sheet name names the vehicle.
+  const rowsCarryVehicle = 'license' in colMap || 'licenseSuffix' in colMap || 'model' in colMap
+  let sheetVid: string | null | undefined
   const toCreate: T[] = []
   let skipped = 0
   const errors: string[] = []
   for (let i = 0; i < rows.length; i++) {
     try {
-      const vid = rowVehicleId(rows[i], colMap, vmap)
+      let vid = rowVehicleId(rows[i], colMap, vmap)
+      if (!vid && !rowsCarryVehicle) {
+        if (sheetVid === undefined) sheetVid = await resolveSheetVehicle(tenantId, username, sheetName, vmap)
+        vid = sheetVid
+      }
       if (!vid) { skipped++; continue }
       const rec = build(rows[i], vid)
       if (!rec) { skipped++; continue }
       toCreate.push(rec)
     } catch (e: any) { errors.push(`แถว ${i + 1}: ${e?.message ?? 'error'}`) }
   }
-  if (toCreate.length) await create(toCreate)
-  return { created: toCreate.length, updated: 0, sub: 0, skipped, errors }
+
+  // Dedup against existing DB rows AND within this file (same key twice -> once).
+  let fresh = toCreate
+  if (toCreate.length) {
+    const vids = [...new Set(toCreate.map((r) => r.VehicleId))]
+    const seen = new Set<string>((await dedup.load(vids)).map(dedup.keyOf))
+    fresh = []
+    for (const rec of toCreate) {
+      const k = dedup.keyOf(rec)
+      if (seen.has(k)) { skipped++; continue }
+      seen.add(k)
+      fresh.push(rec)
+    }
+  }
+  if (fresh.length) await create(fresh)
+  return { created: fresh.length, updated: 0, sub: 0, skipped, errors }
 }
 
-function importRepair(tenantId: string, username: string | undefined, rows: any[][], colMap: Record<string, number>): Promise<CatResult> {
-  return importCategory<Prisma.RepairVehicleCreateManyInput>(tenantId, rows, colMap, (row, vid) => {
+function importRepair(tenantId: string, username: string | undefined, sheetName: string, rows: any[][], colMap: Record<string, number>): Promise<CatResult> {
+  return importCategory<Prisma.RepairVehicleCreateManyInput>(tenantId, username, sheetName, rows, colMap, (row, vid) => {
     const d = dateOrNull(cell(row, colMap, 'repairDate')) ?? dateOrNull(cell(row, colMap, 'receiveDate'))
     if (!d) return null
     return { VehicleId: vid, Status: 'active', RepairDate: d, LicensePlate: str(cell(row, colMap, 'license')), RepairShop: str(cell(row, colMap, 'repairShop')), ReceiveDate: dateOrNull(cell(row, colMap, 'receiveDate')) ?? d, InsurancePay: decOrZero(cell(row, colMap, 'insurancePay')), CompanyPay: decOrZero(cell(row, colMap, 'companyPay')), CreatedByUsername: username ?? 'import' }
-  }, (data) => db.repairVehicle.createMany({ data }))
+  }, (data) => db.repairVehicle.createMany({ data }), {
+    keyOf: (r) => `${r.VehicleId}|${kdate(r.RepairDate)}|${str(r.RepairShop)}|${kdec(r.InsurancePay)}|${kdec(r.CompanyPay)}`,
+    load: (vids) => db.repairVehicle.findMany({ where: { VehicleId: { in: vids } }, select: { VehicleId: true, RepairDate: true, RepairShop: true, InsurancePay: true, CompanyPay: true } }),
+  })
 }
-function importAccident(tenantId: string, username: string | undefined, rows: any[][], colMap: Record<string, number>): Promise<CatResult> {
-  return importCategory<Prisma.AccidentVehicleCreateManyInput>(tenantId, rows, colMap, (row, vid) => {
+function importAccident(tenantId: string, username: string | undefined, sheetName: string, rows: any[][], colMap: Record<string, number>): Promise<CatResult> {
+  return importCategory<Prisma.AccidentVehicleCreateManyInput>(tenantId, username, sheetName, rows, colMap, (row, vid) => {
     const d = dateOrNull(cell(row, colMap, 'accidentDate')) ?? dateOrNull(cell(row, colMap, 'scheduledAt'))
     if (!d) return null
     return { VehicleId: vid, Status: 'active', Date: d, Time: str(cell(row, colMap, 'accidentTime')), Party: str(cell(row, colMap, 'party')), LicensePlate: str(cell(row, colMap, 'license')), DriverName: str(cell(row, colMap, 'driver')), Opponent: str(cell(row, colMap, 'opponent')), CreatedByUsername: username ?? 'import' }
-  }, (data) => db.accidentVehicle.createMany({ data }))
+  }, (data) => db.accidentVehicle.createMany({ data }), {
+    keyOf: (r) => `${r.VehicleId}|${kdate(r.Date)}|${str(r.Time)}|${str(r.Opponent)}`,
+    load: (vids) => db.accidentVehicle.findMany({ where: { VehicleId: { in: vids } }, select: { VehicleId: true, Date: true, Time: true, Opponent: true } }),
+  })
 }
-function importFuel(tenantId: string, username: string | undefined, rows: any[][], colMap: Record<string, number>): Promise<CatResult> {
-  return importCategory<Prisma.GasolineCostCreateManyInput>(tenantId, rows, colMap, (row, vid) => {
+function importFuel(tenantId: string, username: string | undefined, sheetName: string, rows: any[][], colMap: Record<string, number>): Promise<CatResult> {
+  return importCategory<Prisma.GasolineCostCreateManyInput>(tenantId, username, sheetName, rows, colMap, (row, vid) => {
     const d = dateOrNull(cell(row, colMap, 'fuelDate')) ?? dateOrNull(cell(row, colMap, 'scheduledAt'))
     if (!d) return null
     return { VehicleId: vid, Status: 'active', Item: str(cell(row, colMap, 'fuelItem')), Liters: int0(cell(row, colMap, 'liters')), Amount: decOrZero(cell(row, colMap, 'amount')), OdometerStart: int0(cell(row, colMap, 'odometerStart')), OdometerEnd: int0(cell(row, colMap, 'odometerEnd')), DateTime: d, CreatedByUsername: username ?? 'import' }
-  }, (data) => db.gasolineCost.createMany({ data }))
+  }, (data) => db.gasolineCost.createMany({ data }), {
+    keyOf: (r) => `${r.VehicleId}|${kdate(r.DateTime)}|${kdec(r.Amount)}|${r.Liters}|${r.OdometerStart}|${r.OdometerEnd}`,
+    load: (vids) => db.gasolineCost.findMany({ where: { VehicleId: { in: vids } }, select: { VehicleId: true, DateTime: true, Amount: true, Liters: true, OdometerStart: true, OdometerEnd: true } }),
+  })
 }
-function importOil(tenantId: string, username: string | undefined, rows: any[][], colMap: Record<string, number>): Promise<CatResult> {
-  return importCategory<Prisma.DrainTheOilVehicleCreateManyInput>(tenantId, rows, colMap, (row, vid) => {
+function importOil(tenantId: string, username: string | undefined, sheetName: string, rows: any[][], colMap: Record<string, number>): Promise<CatResult> {
+  return importCategory<Prisma.DrainTheOilVehicleCreateManyInput>(tenantId, username, sheetName, rows, colMap, (row, vid) => {
     const d = dateOrNull(cell(row, colMap, 'oilDate')) ?? dateOrNull(cell(row, colMap, 'scheduledAt'))
     if (!d) return null
     return { VehicleId: vid, Status: 'active', Date: d, DueDate: dateOrNull(cell(row, colMap, 'oilDueDate')), Odometer: int0(cell(row, colMap, 'odometer')), TextAlert: str(cell(row, colMap, 'textAlert')) || str(cell(row, colMap, 'note')), CreatedByUsername: username ?? 'import' }
-  }, (data) => db.drainTheOilVehicle.createMany({ data }))
+  }, (data) => db.drainTheOilVehicle.createMany({ data }), {
+    keyOf: (r) => `${r.VehicleId}|${kdate(r.Date)}|${r.Odometer}`,
+    load: (vids) => db.drainTheOilVehicle.findMany({ where: { VehicleId: { in: vids } }, select: { VehicleId: true, Date: true, Odometer: true } }),
+  })
 }
-function importInstallment(tenantId: string, username: string | undefined, rows: any[][], colMap: Record<string, number>): Promise<CatResult> {
-  return importCategory<Prisma.InstallmentsVehicleCreateManyInput>(tenantId, rows, colMap, (row, vid) => {
+function importInstallment(tenantId: string, username: string | undefined, sheetName: string, rows: any[][], colMap: Record<string, number>): Promise<CatResult> {
+  return importCategory<Prisma.InstallmentsVehicleCreateManyInput>(tenantId, username, sheetName, rows, colMap, (row, vid) => {
     const d = dateOrNull(cell(row, colMap, 'dueDate')) ?? dateOrNull(cell(row, colMap, 'scheduledAt'))
     if (!d) return null
     return { VehicleId: vid, Status: 'active', InstallmentNumber: int0(cell(row, colMap, 'installmentNumber')), DueDate: d, Amount: decOrZero(cell(row, colMap, 'amount')) , DatePay: dateOrNull(cell(row, colMap, 'datePay')), CreatedByUsername: username ?? 'import' }
-  }, (data) => db.installmentsVehicle.createMany({ data }))
+  }, (data) => db.installmentsVehicle.createMany({ data }), {
+    keyOf: (r) => `${r.VehicleId}|${r.InstallmentNumber}|${kdate(r.DueDate)}|${kdec(r.Amount)}`,
+    load: (vids) => db.installmentsVehicle.findMany({ where: { VehicleId: { in: vids } }, select: { VehicleId: true, InstallmentNumber: true, DueDate: true, Amount: true } }),
+  })
 }
-function importIncome(tenantId: string, username: string | undefined, rows: any[][], colMap: Record<string, number>): Promise<CatResult> {
-  return importCategory<Prisma.IncomeVehicleCreateManyInput>(tenantId, rows, colMap, (row, vid) => {
+function importIncome(tenantId: string, username: string | undefined, sheetName: string, rows: any[][], colMap: Record<string, number>): Promise<CatResult> {
+  return importCategory<Prisma.IncomeVehicleCreateManyInput>(tenantId, username, sheetName, rows, colMap, (row, vid) => {
     const d = dateOrNull(cell(row, colMap, 'scheduledAt')) ?? dateOrNull(cell(row, colMap, 'receiveDate')) ?? new Date()
     return { VehicleId: vid, Status: 'active', Description: str(cell(row, colMap, 'incomeDescription')) || str(cell(row, colMap, 'note')), CustomerName: str(cell(row, colMap, 'customerName')) || null, DateTime: d, ReceiveDate: dateOrNull(cell(row, colMap, 'receiveDate')), Time: str(cell(row, colMap, 'accidentTime')), WorkOrderNumber: str(cell(row, colMap, 'workOrderNumber')), InvoiceNumber: str(cell(row, colMap, 'invoiceNumber')), AmountReceive: decOrZero(cell(row, colMap, 'amountReceive')) , CreatedByUsername: username ?? 'import' }
-  }, (data) => db.incomeVehicle.createMany({ data }))
+  }, (data) => db.incomeVehicle.createMany({ data }), {
+    keyOf: (r) => `${r.VehicleId}|${str(r.InvoiceNumber)}|${str(r.WorkOrderNumber)}|${kdate(r.DateTime)}|${kdec(r.AmountReceive)}|${str(r.Description)}`,
+    load: (vids) => db.incomeVehicle.findMany({ where: { VehicleId: { in: vids } }, select: { VehicleId: true, InvoiceNumber: true, WorkOrderNumber: true, DateTime: true, AmountReceive: true, Description: true } }),
+  })
 }
 
-const CATEGORY_IMPORTERS: Record<string, (t: string, u: string | undefined, r: any[][], c: Record<string, number>) => Promise<CatResult>> = {
+const CATEGORY_IMPORTERS: Record<string, (t: string, u: string | undefined, sheet: string, r: any[][], c: Record<string, number>) => Promise<CatResult>> = {
   repair: importRepair, accident: importAccident, fuel: importFuel, oil: importOil, installment: importInstallment, income: importIncome,
 }
 
 export function classify(colMap: Record<string, number>): SheetType {
   const has = (f: string) => f in colMap
-  if (has('origin') && has('destination')) return 'jobs'
+  if (has('origin') && (has('destination') || has('driver') || has('scheduledAt'))) return 'jobs'
   if (has('repairDate') || has('repairShop')) return 'repair'
   if (has('accidentDate') || has('opponent') || has('party')) return 'accident'
   if (has('liters') || has('odometerStart') || has('fuelItem')) return 'fuel'
@@ -527,15 +661,34 @@ function bufferToSheets(buffer: Buffer): { name: string; matrix: any[][] }[] {
   return wb.SheetNames.map((name) => ({ name, matrix: XLSX.utils.sheet_to_json<any[]>(wb.Sheets[name], { header: 1, blankrows: false, defval: '' }) as any[][] }))
 }
 
+// Structural signature of a sheet, ignoring per-sheet data values. Workbooks
+// that hold one sheet per vehicle repeat the same header layout dozens of times;
+// sheets sharing a fingerprint can reuse a single (expensive) AI mapping call.
+function headerFingerprint(matrix: any[][]): string {
+  const d = detectHeader(matrix)
+  if (d) return 'h:' + JSON.stringify((matrix[d.headerRow] ?? []).map((c) => str(c)))
+  const labels: string[] = []
+  for (let r = 0; r < Math.min(12, matrix.length); r++)
+    for (const c of matrix[r] ?? []) { const s = str(c); if (s && !/^[\d.,/\s:-]+$/.test(s)) labels.push(`${r}:${s}`) }
+  return 'r:' + labels.join('|')
+}
+
+type Mapping = { type: SheetType; headerRow: number; colMap: Record<string, number>; via: string }
+
 export async function importWorkbook(tenantId: string, username: string | undefined, buffer: Buffer): Promise<SheetResult[]> {
   const sheets = bufferToSheets(buffer)
 
   // Resolve mappings (AI calls) with bounded concurrency — no DB writes here.
-  const mappings: ({ type: SheetType; headerRow: number; colMap: Record<string, number>; via: string } | null)[] = new Array(sheets.length).fill(null)
-  await runChunked(sheets.map((s, i) => ({ s, i })), 4, async ({ s, i }) => {
-    if (s.matrix.length === 0) return
-    mappings[i] = await resolveMapping(s.name, s.matrix)
+  // Dedupe by header fingerprint so identical layouts cost one AI call, not N.
+  const mappings: (Mapping | null)[] = new Array(sheets.length).fill(null)
+  const fps = sheets.map((s) => (s.matrix.length ? headerFingerprint(s.matrix) : ''))
+  const uniq = [...new Set(fps.filter(Boolean))]
+  const byFp = new Map<string, Mapping>()
+  await runChunked(uniq.map((fp) => ({ fp })), 4, async ({ fp }) => {
+    const i = fps.indexOf(fp)
+    byFp.set(fp, await resolveMapping(sheets[i].name, sheets[i].matrix))
   })
+  for (let i = 0; i < sheets.length; i++) mappings[i] = fps[i] ? (byFp.get(fps[i]) ?? null) : null
 
   // Import sheet by sheet (DB writes are sequential per sheet).
   const results: SheetResult[] = []
@@ -551,7 +704,7 @@ export async function importWorkbook(tenantId: string, username: string | undefi
     let r: CatResult
     if (m.type === 'vehicles') r = await importVehicles(tenantId, username, dataRows, m.colMap)
     else if (m.type === 'jobs') r = await importJobs(tenantId, username, dataRows, m.colMap)
-    else r = await CATEGORY_IMPORTERS[m.type](tenantId, username, dataRows, m.colMap)
+    else r = await CATEGORY_IMPORTERS[m.type](tenantId, username, name, dataRows, m.colMap)
     results.push({ sheet: name, type: m.type, ...r })
   }
   return results
