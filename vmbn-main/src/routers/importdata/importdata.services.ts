@@ -503,12 +503,14 @@ async function resolveSheetVehicle(tenantId: string, username: string | undefine
   }
   if (id) return id
   // Sheet names often wrap the plate in noise: "ดั้มพ์ บม-7933", "82-8380 (คันฟ้า)".
-  // Retry the paren-stripped name and its last digit-bearing token (>=3 digits, so
-  // "บด 10 T" can't false-match a plate). Lookup only — the create below keeps the
-  // original parse, so vehicles minted by earlier imports keep matching.
+  // Retry the paren-stripped name, then each plate-looking token right-to-left.
+  // A token must carry >=3 digits AND a non-digit (Thai prefix or dash) so bare
+  // numbers ("บด 10 T", a ปี 2569 year) can't false-match a plate. Lookup only —
+  // the create below keeps the original parse, so vehicles minted by earlier
+  // imports keep matching.
   const cleaned = name.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim()
-  const tok = cleaned.split(' ').filter((t) => /\d{3,}/.test(t)).pop() ?? ''
-  for (const cand of [cleaned, tok]) {
+  const toks = cleaned.split(' ').filter((t) => /\d{3,}/.test(t) && /\D/.test(t)).reverse()
+  for (const cand of [cleaned, ...toks]) {
     if (!cand || cand === name) continue
     const p = parseLicense(cand)
     if (!p.suffix) continue
@@ -625,16 +627,19 @@ const dmyOrNull = (v: any): Date | null => {
   if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null
   // 2-digit years parse as 19yy here; the caller's 1950-1999 window fix then
   // resolves them as short BE years ("20/6/68" -> 1968 -> 2025).
-  return adjustBE(new Date(Date.UTC(yy < 100 ? 1900 + yy : yy, mm - 1, dd)))
+  const d = new Date(Date.UTC(yy < 100 ? 1900 + yy : yy, mm - 1, dd))
+  if (d.getUTCDate() !== dd) return null // 31/2 would silently roll into March
+  return adjustBE(d)
 }
 
 function importRepair(tenantId: string, username: string | undefined, sheetName: string, rows: any[][], colMap: Record<string, number>): Promise<CatResult> {
   // ตาราง MA workbooks: one vehicle per sheet, columns ลำดับ|วันที่|รายละเอียด|
   // ผู้ซ่อม|จำนวน|ราคา. Line items of one visit leave วันที่ blank on continuation
   // rows, so the last seen date carries forward. ราคา is the line total ->
-  // CompanyPay (the dashboard sums outgoings from CompanyPay). The MA-specific
-  // rules only engage when the sheet has a รายละเอียด column (hasDesc), so the
-  // old repair layout (วันที่ซ่อม/อู่ per row) imports exactly as before.
+  // CompanyPay (the dashboard sums outgoings from CompanyPay). The row-skip and
+  // carry-forward rules only engage when the sheet has a รายละเอียด column
+  // (hasDesc); the date-sanity window and Thai-price guard apply to the old
+  // repair layout too, where they only block garbage values.
   const hasDesc = 'incomeDescription' in colMap
   let lastDate: Date | null = null
   return importCategory<Prisma.RepairVehicleCreateManyInput>(tenantId, username, sheetName, rows, colMap, (row, vid) => {
@@ -648,7 +653,10 @@ function importRepair(tenantId: string, username: string | undefined, sheetName:
     let d = dateOrNull(cell(row, colMap, 'repairDate')) ?? dateOrNull(cell(row, colMap, 'receiveDate'))
     if (!d && 'scheduledAt' in colMap) {
       const raw = cell(row, colMap, 'scheduledAt')
-      d = dateOrNull(raw) ?? dmyOrNull(raw)
+      // dmyOrNull FIRST: JS new Date("6/5/68") parses M/D/Y successfully, so
+      // letting dateOrNull go first would swap day and month for any hand-typed
+      // slash date whose day is <= 12. Serials/ISO fall through to dateOrNull.
+      d = dmyOrNull(raw) ?? dateOrNull(raw)
     }
     // Hand-typed "6/5/68" means BE 2568, but Excel windows 2-digit years to 19xx,
     // so both serials (24964) and strings land in 1950-1999. Real CE year =
@@ -797,11 +805,15 @@ async function resolveMapping(sheetName: string, matrix: any[][]): Promise<{ typ
     const det = detectHeader(matrix)
     // Repair headers (ผู้ซ่อม/อู่/วันที่ซ่อม) are curated and unambiguous, but the
     // AI sometimes reads a repair sheet's รายละเอียด column as income — which would
-    // import repair costs as revenue. Trust the heuristic's 'repair' over the AI,
-    // except for 'accident' (อู่ also appears on accident sheets, where the AI is
-    // the one that can tell them apart).
+    // import repair costs as revenue (or as garbage vehicles). Override ONLY those
+    // two catastrophic misreads: for accident/oil/fuel sheets that happen to carry
+    // an อู่ column the AI is the one that can tell the types apart.
     const hType = det ? classify(det.colMap) : 'unknown'
-    const type = hType === 'repair' && ai.type !== 'accident' ? 'repair' : ai.type
+    // 'oil' counts as a misread only when the sheet has no oil column at all —
+    // a real oil sheet always carries วันที่เปลี่ยนน้ำมัน/ครบกำหนดเปลี่ยน.
+    const aiMisread = ai.type === 'income' || ai.type === 'vehicles'
+      || (ai.type === 'oil' && !('oilDate' in (det?.colMap ?? {})) && !('oilDueDate' in (det?.colMap ?? {})))
+    const type = hType === 'repair' && aiMisread ? 'repair' : ai.type
     return {
       type,
       headerRow: det ? det.headerRow : ai.headerRow,

@@ -212,6 +212,7 @@ export type RepairVehicleData = {
   repairDate: string;
   licensePlate: string;
   repairShop: string;
+  description?: string | null;
   receiveDate: string;
   insurancePay: number;
   companyPay: number;

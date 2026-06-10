@@ -1070,6 +1070,7 @@ function VehicleInfoModal({
         id: index + 1,
         RepairDate: dayjs(item.repairDate).format('DD/MM/YYYY'),
         LicensePlate: item.licensePlate,
+        Description: item.description ?? '',
         RepairShop: item.repairShop,
         ReceiveDate: dayjs(item.receiveDate).format('DD/MM/YYYY'),
         InsurancePay: item.insurancePay.toString(),
@@ -1573,6 +1574,7 @@ function VehicleInfoModal({
           )
         },
         { field: 'LicensePlate', headerName: 'ทะเบียน', minWidth: 60, flex: 1, headerAlign: 'center', align: 'center', editable: true },
+        { field: 'Description', headerName: 'รายการซ่อม', minWidth: 120, flex: 1.4, headerAlign: 'center', align: 'left' },
         { field: 'RepairShop', headerName: 'ซ่อมที่', minWidth: 60, flex: 1, headerAlign: 'center', align: 'center', editable: true },
         {
           field: 'ReceiveDate', headerName: 'วันที่รับรถ', minWidth: 60, flex: 0.6, headerAlign: 'center', align: 'center', editable: true,
