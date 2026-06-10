@@ -30,11 +30,11 @@ export function Income({ diff, trend, sx, value, subValue, loading = false, help
       <CardContent>
         <Stack spacing={3}>
           <Stack direction="row" sx={{ alignItems: 'flex-start', justifyContent: 'space-between' }} spacing={3}>
-            <Stack spacing={1}>
+            <Stack spacing={1} sx={{ minWidth: 0 }}>
               <MetricLabel label="รายได้" helpText={helpText} />
-              {loading ? <Skeleton width={140} height={48} /> : <Typography variant="h3">{value}</Typography>}
+              {loading ? <Skeleton width={140} height={40} /> : <Typography sx={{ fontWeight: 700, lineHeight: 1.2, whiteSpace: 'nowrap', fontSize: 'clamp(1.1rem, 1.7vw, 1.6rem)' }}>{value}</Typography>}
             </Stack>
-            <Avatar sx={{ backgroundColor: 'var(--mui-palette-primary-main)', height: '56px', width: '56px' }}>
+            <Avatar sx={{ backgroundColor: 'var(--mui-palette-primary-main)', height: '56px', width: '56px', flexShrink: 0 }}>
               <CurrencyDollarIcon fontSize="var(--icon-fontSize-lg)" />
             </Avatar>
           </Stack>

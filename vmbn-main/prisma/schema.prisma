@@ -585,8 +585,10 @@ model IncomeVehicle {
   UpdatedAt DateTime @default(now())
   CreatedByUsername String?
   UpdatedByUsername String?
-  VehicleId String @db.VarChar(36)
-  Vehicle Vehicle @relation(fields: [VehicleId], references: [VehicleId])
+  VehicleId String? @db.VarChar(36)
+  Vehicle Vehicle? @relation(fields: [VehicleId], references: [VehicleId])
+  TenantId String? @db.VarChar(36)
+  SourceLabel String?
 
   ReceiveDate DateTime?
 
@@ -596,13 +598,14 @@ model IncomeVehicle {
   WorkOrderNumber String @db.VarChar(50)
   InvoiceNumber String @db.VarChar(50)
   AmountReceive Decimal @db.Decimal(10,2) @default(0)
-  
+
   VehicleDriver VehicleDriver? @relation(fields: [VehicleDriverId], references: [VehicleDriverId])
   VehicleDriverId String? @db.VarChar(36)
   PaymentStatus PaymentStatus? @relation(fields: [PaymentStatusId], references: [PaymentStatusId])
   PaymentStatusId String? @db.VarChar(36)
   @@index([VehicleId])
   @@index([IncomeVehicleId])
+  @@index([TenantId])
 }
 
 model PaymentStatus {
@@ -617,4 +620,21 @@ model PaymentStatus {
   IncomeVehicle IncomeVehicle[]
   @@index([TenantId])
   @@index([PaymentStatusId])
+}
+
+model ImportLog {
+  ImportLogId String @id @default(uuid()) @db.VarChar(36)
+  TenantId String @db.VarChar(36)
+  CreatedAt DateTime @default(now())
+  CreatedByUsername String?
+  FileName String?
+  FileRows Int @default(0)
+  FileSum Decimal @db.Decimal(16,2) @default(0)
+  CreatedRows Int @default(0)
+  CreatedSum Decimal @db.Decimal(16,2) @default(0)
+  DupRows Int @default(0)
+  DupSum Decimal @db.Decimal(16,2) @default(0)
+  ExistRows Int @default(0)
+  ExistSum Decimal @db.Decimal(16,2) @default(0)
+  @@index([TenantId])
 }

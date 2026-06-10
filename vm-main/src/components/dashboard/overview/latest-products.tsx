@@ -22,13 +22,6 @@ import { useRouter } from 'next/navigation';
 
 const urlImage = process.env.NEXT_PUBLIC_URL_IMAGE || '';
 
-export interface Product {
-  id: string;
-  image: string;
-  name: string;
-  updatedAt: Date;
-}
-
 export interface LatestProductsProps {
   products?: VehicleModel[];
   sx?: SxProps;

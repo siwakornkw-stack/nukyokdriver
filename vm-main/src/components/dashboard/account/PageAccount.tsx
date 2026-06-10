@@ -18,7 +18,6 @@ export default function Page(): React.JSX.Element {
     console.log('Form submitted');
     const formData = new FormData(event.target as HTMLFormElement);
     const data = Object.fromEntries(formData.entries());
-    console.log(data);
     const imgInput = document.getElementById('img-input');
     if (imgInput && imgInput instanceof HTMLInputElement && imgInput.files?.[0]) {
         console.log('imgInput', imgInput.files[0]);
@@ -29,7 +28,6 @@ export default function Page(): React.JSX.Element {
         if (res.status === 200 && res.data) {
             const dataResponse = getResponseData(res);
             if (dataResponse) {
-                console.log('dataResponse', dataResponse);
                 data.img = dataResponse.data.url;
             }
         } else {
@@ -38,7 +36,6 @@ export default function Page(): React.JSX.Element {
     } else {
         data.img = '/uploads/users/avatar.png';
     }
-    console.log('data', data);
 
     const payload: UserUpdate = {
         Name: data.name as string,

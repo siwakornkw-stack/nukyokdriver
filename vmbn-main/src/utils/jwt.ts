@@ -66,7 +66,7 @@ export function generateTokens(TenantId: Tenant['TenantId'], customer: Customer,
 
 export function verifyRefreshToken(token: string) {
   try {
-    return jwt.verify(token, config.jwt_refresh_secret)
+    return jwt.verify(token, config.jwt_refresh_secret, { algorithms: ['HS256'] })
   } catch (error) {
     throw error
   }
@@ -74,7 +74,7 @@ export function verifyRefreshToken(token: string) {
 
 export function verifyAccessToken(token: string) {
   try {
-    return jwt.verify(token, config.jwt_access_secret)
+    return jwt.verify(token, config.jwt_access_secret, { algorithms: ['HS256'] })
   } catch (error) {
     throw error
   }

@@ -132,7 +132,6 @@ const style = (theme: Theme) => ({
 });
 
 function VehicleFormModal({ open, onClose, actionEdit, infoVehicle, theme, onSuccess }: VehicleFormModalProps): JSX.Element {
-    console.log('infoVehicle', infoVehicle);
     const [optionsAll, setOptionsAll] = useState<OptionResponse | null>(null);
     const [optionsVehicleTypes, setOptionsVehicleTypes] = useState<Option[] | null>(null);
     const [optionsCarBrands, setOptionsCarBrands] = useState<Option[] | null>(null);
@@ -207,7 +206,6 @@ function VehicleFormModal({ open, onClose, actionEdit, infoVehicle, theme, onSuc
     });
 
     useEffect(() => {
-        console.log('actionEdit infoVehicle', actionEdit, infoVehicle);
         if (actionEdit && infoVehicle) {
             reset({
                 no: infoVehicle?.no,
@@ -267,7 +265,6 @@ function VehicleFormModal({ open, onClose, actionEdit, infoVehicle, theme, onSuc
             if (res.status === 200 && res.data) {
                 const dataResponse = getResponseData(res);
                 if (dataResponse) {
-                    console.log('dataResponse', dataResponse);
                     data.img = dataResponse.data.url;
                 }
             } else {
@@ -276,7 +273,6 @@ function VehicleFormModal({ open, onClose, actionEdit, infoVehicle, theme, onSuc
         } else {
             data.img = vehicleImage || '/uploads/vehicle/logo.png';
         }
-        console.log('data', data);
         if (actionEdit) {
             try {
                 if (!infoVehicle?.id) {
@@ -294,7 +290,6 @@ function VehicleFormModal({ open, onClose, actionEdit, infoVehicle, theme, onSuc
                 if (res.status === 200 && res.data) {
                     const dataResponse = getResponseData(res);
                     if (dataResponse) {
-                        console.log('dataResponse', dataResponse);
                         CustomToast.success('success', 'แก้ไขข้อมูลรถสำเร็จ');
                         onSuccess();
                     }
@@ -317,7 +312,6 @@ function VehicleFormModal({ open, onClose, actionEdit, infoVehicle, theme, onSuc
                 if (res.status === 200 && res.data) {
                     const dataResponse = getResponseData(res);
                     if (dataResponse) {
-                        console.log('dataResponse', dataResponse);
                         CustomToast.success('success', 'เพิ่มข้อมูลรถสำเร็จ');
                         onSuccess();
                     }

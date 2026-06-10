@@ -1,8 +1,6 @@
-import { Decimal } from '@prisma/client/runtime/library';
 import axios from 'axios';
 import crypto from 'crypto';
 import { HeaderAgent, ReqAgentBalance, ReqBalance, ReqChangePassword, ReqCommission, ReqCreditHistory, ReqDirectPlay, ReqGameSetting, ReqListsGameProvider, ReqRegister, ReqTransfer, ResRegister } from '../typings/agent';
-import { date } from 'zod';
 import qs from 'qs';
 import { APIResponse } from '../typings/api';
 export function formatDate(date: Date) {

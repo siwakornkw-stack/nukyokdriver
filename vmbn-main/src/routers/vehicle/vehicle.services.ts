@@ -73,10 +73,11 @@ export function getVehicleAll(TenantId:string, sortBy: string, sortOrder: string
   })))
 }
 
-export function findVehicleById(VehicleId: Vehicle['VehicleId']) {
+export function findVehicleById(VehicleId: Vehicle['VehicleId'], TenantId: string) {
   return db.vehicle.findFirst({
     where: {
       VehicleId,
+      TenantId,
     },
   })
 }
@@ -98,10 +99,11 @@ export function getVehicleAllWithRelation(TenantId:string) {
   })
 }
 
-export function getVehicleAllWithRelationById(VehicleId: Vehicle['VehicleId']) {
+export function getVehicleAllWithRelationById(VehicleId: Vehicle['VehicleId'], TenantId: string) {
   return db.vehicle.findFirst({
     where: {
       VehicleId,
+      TenantId,
     },
     include: {
       VehicleOwner: true,
@@ -364,7 +366,15 @@ export function addVehicleService(data: Prisma.VehicleCreateInput) {
   })
 }
 
-export function updateVehicleService(data: Prisma.VehicleUpdateInput) {
+export async function updateVehicleService(data: Prisma.VehicleUpdateInput, TenantId: string) {
+  const existing = await db.vehicle.findFirst({
+    where: {
+      VehicleId: data.VehicleId as string,
+      TenantId,
+    },
+    select: { VehicleId: true }
+  })
+  if (!existing) throw new Error('Not found')
   return db.vehicle.update({
     where: {
       VehicleId: data.VehicleId as string,
@@ -373,10 +383,11 @@ export function updateVehicleService(data: Prisma.VehicleUpdateInput) {
   })
 }
 
-export function getTaxByIdVehicleService(VehicleId: string) {
+export function getTaxByIdVehicleService(VehicleId: string, TenantId: string) {
   return db.tax.findMany({
-    where: { 
+    where: {
       VehicleId: VehicleId,
+      Vehicle: { TenantId: TenantId },
       Status: 'active'
     }
   }).then(taxes => taxes.map(t => ({
@@ -396,17 +407,20 @@ export function addVehicleTaxService(data: Prisma.TaxCreateInput) {
   })
 }
 
-export function updateVehicleTaxService(data: Prisma.TaxUpdateInput, TaxId: string) {
-  return db.tax.update({
-    where: { TaxId: TaxId },
-    data: data
+export async function updateVehicleTaxService(data: Prisma.TaxUpdateInput, TaxId: string, TenantId: string) {
+  const result = await db.tax.updateMany({
+    where: { TaxId: TaxId, Vehicle: { TenantId: TenantId } },
+    data: data as Prisma.TaxUpdateManyMutationInput
   })
+  if (result.count === 0) throw new Error('Not found')
+  return result
 }
 
-export function getCompulsoryMotorInsuranceByIdVehicleService(VehicleId: string) {
+export function getCompulsoryMotorInsuranceByIdVehicleService(VehicleId: string, TenantId: string) {
   return db.compulsoryMotorInsuranceVehicle.findMany({
-    where: { 
+    where: {
       VehicleId: VehicleId,
+      Vehicle: { TenantId: TenantId },
       Status: 'active'
     }
   }).then(taxes => taxes.map(t => ({
@@ -424,17 +438,20 @@ export function addCompulsoryMotorInsuranceVehicleService(data: Prisma.Compulsor
     data: data
   })
 }
-export function updateCompulsoryMotorInsuranceVehicleService(data: Prisma.CompulsoryMotorInsuranceVehicleUpdateInput, CompulsoryMotorInsuranceVehicleId: string) {
-  return db.compulsoryMotorInsuranceVehicle.update({
-    where: { CompulsoryMotorInsuranceVehicleId: CompulsoryMotorInsuranceVehicleId },
-    data: data
+export async function updateCompulsoryMotorInsuranceVehicleService(data: Prisma.CompulsoryMotorInsuranceVehicleUpdateInput, CompulsoryMotorInsuranceVehicleId: string, TenantId: string) {
+  const result = await db.compulsoryMotorInsuranceVehicle.updateMany({
+    where: { CompulsoryMotorInsuranceVehicleId: CompulsoryMotorInsuranceVehicleId, Vehicle: { TenantId: TenantId } },
+    data: data as Prisma.CompulsoryMotorInsuranceVehicleUpdateManyMutationInput
   })
+  if (result.count === 0) throw new Error('Not found')
+  return result
 }
 
-export function getInsurancePolicyByIdVehicleService(VehicleId: string) {
+export function getInsurancePolicyByIdVehicleService(VehicleId: string, TenantId: string) {
   return db.insurancePolicyVehicle.findMany({
-    where: { 
+    where: {
       VehicleId: VehicleId,
+      Vehicle: { TenantId: TenantId },
       Status: 'active'
     }
   }).then(taxes => taxes.map(t => ({
@@ -455,17 +472,20 @@ export function addInsurancePolicyVehicleService(data: Prisma.InsurancePolicyVeh
     data: data
   })
 }
-export function updateInsurancePolicyVehicleService(data: Prisma.InsurancePolicyVehicleUpdateInput, InsurancePolicyVehicleId: string) {
-  return db.insurancePolicyVehicle.update({
-    where: { InsurancePolicyVehicleId: InsurancePolicyVehicleId },
-    data: data
+export async function updateInsurancePolicyVehicleService(data: Prisma.InsurancePolicyVehicleUpdateInput, InsurancePolicyVehicleId: string, TenantId: string) {
+  const result = await db.insurancePolicyVehicle.updateMany({
+    where: { InsurancePolicyVehicleId: InsurancePolicyVehicleId, Vehicle: { TenantId: TenantId } },
+    data: data as Prisma.InsurancePolicyVehicleUpdateManyMutationInput
   })
+  if (result.count === 0) throw new Error('Not found')
+  return result
 }
 
-export function getAttachFileByIdVehicleService(VehicleId: string) {
+export function getAttachFileByIdVehicleService(VehicleId: string, TenantId: string) {
   return db.attachFileVehicle.findMany({
-    where: { 
+    where: {
       VehicleId: VehicleId,
+      Vehicle: { TenantId: TenantId },
       Status: 'active'
     }
   }).then(taxes => taxes.map(t => ({
@@ -486,17 +506,20 @@ export async function addAttachFileVehicleService(data: Prisma.AttachFileVehicle
     throw error;
   }
 }
-export function updateAttachFileVehicleService(data: Prisma.AttachFileVehicleUpdateInput, AttachFileVehicleId: string) {
-  return db.attachFileVehicle.update({
-    where: { AttachFileVehicleId: AttachFileVehicleId },
-    data: data
+export async function updateAttachFileVehicleService(data: Prisma.AttachFileVehicleUpdateInput, AttachFileVehicleId: string, TenantId: string) {
+  const result = await db.attachFileVehicle.updateMany({
+    where: { AttachFileVehicleId: AttachFileVehicleId, Vehicle: { TenantId: TenantId } },
+    data: data as Prisma.AttachFileVehicleUpdateManyMutationInput
   })
+  if (result.count === 0) throw new Error('Not found')
+  return result
 }
 
-export function getCarTiresByIdVehicleService(VehicleId: string) {
+export function getCarTiresByIdVehicleService(VehicleId: string, TenantId: string) {
   return db.carTires.findMany({
-    where: { 
+    where: {
       VehicleId: VehicleId,
+      Vehicle: { TenantId: TenantId },
       Status: 'active'
     }
   }).then(taxes => taxes.map(t => ({
@@ -511,17 +534,20 @@ export function addCarTiresService(data: Prisma.CarTiresCreateInput) {
     data: data
   })
 }
-export function updateCarTiresService(data: Prisma.CarTiresUpdateInput, CarTiresId: string) {
-  return db.carTires.update({
-    where: { CarTiresId: CarTiresId },
-    data: data
+export async function updateCarTiresService(data: Prisma.CarTiresUpdateInput, CarTiresId: string, TenantId: string) {
+  const result = await db.carTires.updateMany({
+    where: { CarTiresId: CarTiresId, Vehicle: { TenantId: TenantId } },
+    data: data as Prisma.CarTiresUpdateManyMutationInput
   })
+  if (result.count === 0) throw new Error('Not found')
+  return result
 }
 
-export function getAccidentVehicleByIdVehicleService(VehicleId: string) {
+export function getAccidentVehicleByIdVehicleService(VehicleId: string, TenantId: string) {
   return db.accidentVehicle.findMany({
-    where: { 
+    where: {
       VehicleId: VehicleId,
+      Vehicle: { TenantId: TenantId },
       Status: 'active'
     }
   }).then(taxes => taxes.map(t => ({
@@ -540,17 +566,20 @@ export function addAccidentVehicleService(data: Prisma.AccidentVehicleCreateInpu
     data: data
   })
 }
-export function updateAccidentVehicleService(data: Prisma.AccidentVehicleUpdateInput, AccidentVehicleId: string) {
-  return db.accidentVehicle.update({
-    where: { AccidentVehicleId: AccidentVehicleId },
-    data: data
+export async function updateAccidentVehicleService(data: Prisma.AccidentVehicleUpdateInput, AccidentVehicleId: string, TenantId: string) {
+  const result = await db.accidentVehicle.updateMany({
+    where: { AccidentVehicleId: AccidentVehicleId, Vehicle: { TenantId: TenantId } },
+    data: data as Prisma.AccidentVehicleUpdateManyMutationInput
   })
+  if (result.count === 0) throw new Error('Not found')
+  return result
 }
 
-export function getRepairVehicleByIdVehicleService(VehicleId: string) {
+export function getRepairVehicleByIdVehicleService(VehicleId: string, TenantId: string) {
   return db.repairVehicle.findMany({
-    where: { 
+    where: {
       VehicleId: VehicleId,
+      Vehicle: { TenantId: TenantId },
       Status: 'active'
     }
   }).then(taxes => taxes.map(t => ({
@@ -569,17 +598,20 @@ export function addRepairVehicleService(data: Prisma.RepairVehicleCreateInput) {
     data: data
   })
 }
-export function updateRepairVehicleService(data: Prisma.RepairVehicleUpdateInput, RepairVehicleId: string) {
-  return db.repairVehicle.update({
-    where: { RepairVehicleId: RepairVehicleId },
-    data: data
+export async function updateRepairVehicleService(data: Prisma.RepairVehicleUpdateInput, RepairVehicleId: string, TenantId: string) {
+  const result = await db.repairVehicle.updateMany({
+    where: { RepairVehicleId: RepairVehicleId, Vehicle: { TenantId: TenantId } },
+    data: data as Prisma.RepairVehicleUpdateManyMutationInput
   })
+  if (result.count === 0) throw new Error('Not found')
+  return result
 }
 
-export function getGasolineCostByIdVehicleService(VehicleId: string) {
+export function getGasolineCostByIdVehicleService(VehicleId: string, TenantId: string) {
   return db.gasolineCost.findMany({
-    where: { 
+    where: {
       VehicleId: VehicleId,
+      Vehicle: { TenantId: TenantId },
       Status: 'active'
     }
   }).then(taxes => taxes.map(t => ({
@@ -597,17 +629,20 @@ export function addGasolineCostService(data: Prisma.GasolineCostCreateInput) {
     data: data
   })
 }
-export function updateGasolineCostService(data: Prisma.GasolineCostUpdateInput, GasolineCostId: string) {
-  return db.gasolineCost.update({
-    where: { GasolineCostId: GasolineCostId },
-    data: data
+export async function updateGasolineCostService(data: Prisma.GasolineCostUpdateInput, GasolineCostId: string, TenantId: string) {
+  const result = await db.gasolineCost.updateMany({
+    where: { GasolineCostId: GasolineCostId, Vehicle: { TenantId: TenantId } },
+    data: data as Prisma.GasolineCostUpdateManyMutationInput
   })
+  if (result.count === 0) throw new Error('Not found')
+  return result
 }
 
-export function getDrainTheOilVehicleByIdVehicleService(VehicleId: string) {
+export function getDrainTheOilVehicleByIdVehicleService(VehicleId: string, TenantId: string) {
   return db.drainTheOilVehicle.findMany({
-    where: { 
+    where: {
       VehicleId: VehicleId,
+      Vehicle: { TenantId: TenantId },
       Status: 'active'
     }
   }).then(taxes => taxes.map(t => ({
@@ -622,17 +657,20 @@ export function addDrainTheOilVehicleService(data: Prisma.DrainTheOilVehicleCrea
     data: data
   })
 }
-export function updateDrainTheOilVehicleService(data: Prisma.DrainTheOilVehicleUpdateInput, DrainTheOilVehicleId: string) {
-  return db.drainTheOilVehicle.update({
-    where: { DrainTheOilVehicleId: DrainTheOilVehicleId },
-    data: data
+export async function updateDrainTheOilVehicleService(data: Prisma.DrainTheOilVehicleUpdateInput, DrainTheOilVehicleId: string, TenantId: string) {
+  const result = await db.drainTheOilVehicle.updateMany({
+    where: { DrainTheOilVehicleId: DrainTheOilVehicleId, Vehicle: { TenantId: TenantId } },
+    data: data as Prisma.DrainTheOilVehicleUpdateManyMutationInput
   })
+  if (result.count === 0) throw new Error('Not found')
+  return result
 }
 
-export function getInstallmentsVehicleByIdVehicleService(VehicleId: string) {
+export function getInstallmentsVehicleByIdVehicleService(VehicleId: string, TenantId: string) {
   return db.installmentsVehicle.findMany({
-    where: { 
+    where: {
       VehicleId: VehicleId,
+      Vehicle: { TenantId: TenantId },
       Status: 'active'
     }
   }).then(installments => installments.map(t => ({
@@ -650,17 +688,20 @@ export function addInstallmentsVehicleService(data: Prisma.InstallmentsVehicleCr
     data: data
   })
 }
-export function updateInstallmentsVehicleService(data: Prisma.InstallmentsVehicleUpdateInput, InstallmentsVehicleId: string) {
-  return db.installmentsVehicle.update({
-    where: { InstallmentsVehicleId: InstallmentsVehicleId },
-    data: data
+export async function updateInstallmentsVehicleService(data: Prisma.InstallmentsVehicleUpdateInput, InstallmentsVehicleId: string, TenantId: string) {
+  const result = await db.installmentsVehicle.updateMany({
+    where: { InstallmentsVehicleId: InstallmentsVehicleId, Vehicle: { TenantId: TenantId } },
+    data: data as Prisma.InstallmentsVehicleUpdateManyMutationInput
   })
+  if (result.count === 0) throw new Error('Not found')
+  return result
 }
 
-export function getImageVehicleByIdVehicleService(VehicleId: string) {
+export function getImageVehicleByIdVehicleService(VehicleId: string, TenantId: string) {
   return db.imageVehicle.findMany({
-    where: { 
-      VehicleId: VehicleId
+    where: {
+      VehicleId: VehicleId,
+      Vehicle: { TenantId: TenantId }
     }
   }).then(taxes => taxes.map(t => ({
     uuid: t.ImageVehicleId,
@@ -683,17 +724,20 @@ export async function addImageVehicleService(data: Prisma.ImageVehicleCreateMany
     throw error;
   }
 }
-export function updateImageVehicleService(data: Prisma.ImageVehicleUpdateInput, ImageVehicleId: string) {
-  return db.imageVehicle.update({
-    where: { ImageVehicleId: ImageVehicleId },
-    data: data
+export async function updateImageVehicleService(data: Prisma.ImageVehicleUpdateInput, ImageVehicleId: string, TenantId: string) {
+  const result = await db.imageVehicle.updateMany({
+    where: { ImageVehicleId: ImageVehicleId, Vehicle: { TenantId: TenantId } },
+    data: data as Prisma.ImageVehicleUpdateManyMutationInput
   })
+  if (result.count === 0) throw new Error('Not found')
+  return result
 }
 
-export function getIncomeVehicleByIdVehicleService(VehicleId: string) {
+export function getIncomeVehicleByIdVehicleService(VehicleId: string, TenantId: string) {
   return db.incomeVehicle.findMany({
-    where: { 
+    where: {
       VehicleId: VehicleId,
+      TenantId: TenantId,
       Status: 'active'
     }
   }).then(incomes => incomes.map(t => ({
@@ -715,7 +759,15 @@ export function addIncomeVehicleService(data: Prisma.IncomeVehicleCreateInput) {
     data: data
   })
 }
-export function updateIncomeVehicleService(data: Prisma.IncomeVehicleUpdateInput, IncomeVehicleId: string) {
+export async function updateIncomeVehicleService(data: Prisma.IncomeVehicleUpdateInput, IncomeVehicleId: string, TenantId: string) {
+  const existing = await db.incomeVehicle.findFirst({
+    where: {
+      IncomeVehicleId: IncomeVehicleId,
+      TenantId: TenantId,
+    },
+    select: { IncomeVehicleId: true }
+  })
+  if (!existing) throw new Error('Not found')
   return db.incomeVehicle.update({
     where: { IncomeVehicleId: IncomeVehicleId },
     data: data

@@ -1,24 +1,13 @@
 'use client';
 
 import * as React from 'react';
-// import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
-// import Checkbox from '@mui/material/Checkbox';
 import Divider from '@mui/material/Divider';
 import Stack from '@mui/material/Stack';
-// import Table from '@mui/material/Table';
-// import TableBody from '@mui/material/TableBody';
-// import TableCell from '@mui/material/TableCell';
-// import TableHead from '@mui/material/TableHead';
-// import TablePagination from '@mui/material/TablePagination';
-// import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 import dayjs from 'dayjs';
 import 'dayjs/locale/th';  // นำเข้า locale ภาษาไทย
-
-// import { useSelection } from '@/hooks/use-selection';
-// import { CardContent, Grid } from '@mui/material';
 
 import Grid from '@mui/material/Unstable_Grid2';
 import CardContent from '@mui/material/CardContent';
@@ -26,79 +15,6 @@ import Image from 'next/image';
 import type { VehicleModel } from '@/types/vehicle';
 
 const urlImage = process.env.NEXT_PUBLIC_URL_IMAGE || '';
-
-export interface Customer {
-  id: string;
-  avatar: string;
-  name: string;
-  email: string;
-  address: { city: string; state: string; country: string; street: string };
-  phone: string;
-  createdAt: Date;
-}
-
-export interface Owner {
-  id: string;
-  name: string;
-  avatar: string;
-  email: string;
-  phone: string;
-  address: {
-    city: string;
-    country: string;
-    state: string;
-    street: string;
-  };
-}
-
-export interface ServiceHistory {
-  date: string;
-  description: string;
-  mileage: number;
-  cost: number;
-}
-
-export interface UsageDetails {
-  mileage: number;
-  fuelType: string;
-  fuelConsumption: number;
-  serviceHistory: ServiceHistory[];
-}
-
-export interface Trip {
-  id: string;
-  date: string;
-  startLocation: string;
-  endLocation: string;
-  distance: number;
-  duration: number;
-  fuelUsed: number;
-}
-
-export interface TirePressure {
-  frontLeft: number;
-  frontRight: number;
-  rearLeft: number;
-  rearRight: number;
-}
-
-export interface Status {
-  fuelLevel: number;
-  batteryHealth: string;
-  tirePressure: TirePressure;
-}
-
-/* export interface Car {
-  id: string;
-  owner: Owner;
-  vehicleDetails: VehicleDetails;
-  usageDetails: UsageDetails;
-  trips: Trip[];
-  status: Status;
-  createdAt: Date;
-  updatedAt: Date;
-} */
-
 
 interface VehicleTableProps {
   count?: number;
@@ -130,7 +46,7 @@ export function VehicleTable({
             // const isSelected = selected?.has(row.id);
 
             return (
-            <Grid /* lg={4} md={6} xs={12} */ key={row.no} onClick={() => {handleBillVehicleOpen(row)}} flexBasis={400} flexGrow={1} flexShrink={1} flexWrap="wrap">
+            <Grid /* lg={4} md={6} xs={12} */ key={row.id} onClick={() => {handleBillVehicleOpen(row)}} flexBasis={400} flexGrow={1} flexShrink={1} flexWrap="wrap">
               <Card sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                 <CardContent sx={{ flex: '1 1 auto' }}>
                   <Stack spacing={2}>
@@ -168,65 +84,6 @@ export function VehicleTable({
             );
           })}
         </Grid>
-        
-        {/* <Table sx={{ minWidth: '800px' }}>
-          <TableHead>
-            <TableRow>
-              <TableCell padding="checkbox">
-                <Checkbox
-                  checked={selectedAll}
-                  indeterminate={selectedSome}
-                  onChange={(event) => {
-                    if (event.target.checked) {
-                      selectAll();
-                    } else {
-                      deselectAll();
-                    }
-                  }}
-                />
-              </TableCell>
-              <TableCell>Name</TableCell>
-              <TableCell>Email</TableCell>
-              <TableCell>Location</TableCell>
-              <TableCell>Phone</TableCell>
-              <TableCell>Signed Up</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {rows.map((row) => {
-              const isSelected = selected?.has(row.id);
-
-              return (
-                <TableRow hover key={row.id} selected={isSelected}>
-                  <TableCell padding="checkbox">
-                    <Checkbox
-                      checked={isSelected}
-                      onChange={(event) => {
-                        if (event.target.checked) {
-                          selectOne(row.id);
-                        } else {
-                          deselectOne(row.id);
-                        }
-                      }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Stack sx={{ alignItems: 'center' }} direction="row" spacing={2}>
-                      <Avatar src={row.avatar} />
-                      <Typography variant="subtitle2">{row.name}</Typography>
-                    </Stack>
-                  </TableCell>
-                  <TableCell>{row.email}</TableCell>
-                  <TableCell>
-                    {row.address.city}, {row.address.state}, {row.address.country}
-                  </TableCell>
-                  <TableCell>{row.phone}</TableCell>
-                  <TableCell>{dayjs(row.createdAt).format('MMM D, YYYY')}</TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table> */}
       </Box>
       <Divider />
     </Box>

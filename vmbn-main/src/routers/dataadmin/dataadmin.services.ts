@@ -46,10 +46,15 @@ const CONFIG: Record<DataType, TypeCfg> = {
   },
   income: {
     model: 'incomeVehicle', id: 'IncomeVehicleId', date: 'DateTime', label: 'รายได้',
-    select: { Description: true, InvoiceNumber: true, AmountReceive: true },
+    select: { Description: true, InvoiceNumber: true, AmountReceive: true, SourceLabel: true },
     summary: (r) => `${r.Description || '-'} บิล ${r.InvoiceNumber || '-'} รับ ${dec(r.AmountReceive)} บาท`,
   },
 }
+
+// Tenant scope: income can have null VehicleId (unlinked job-label rows) so it is
+// scoped by its own TenantId column; every other type scopes via the Vehicle relation.
+const tenantScope = (type: DataType, tenantId: string): any =>
+  type === 'income' ? { TenantId: tenantId } : { Vehicle: { TenantId: tenantId } }
 
 export const isDataType = (t: string): t is DataType => t in CONFIG
 export const dataTypeList = (): { value: DataType; label: string }[] =>
@@ -60,7 +65,7 @@ export interface Filter { vehicleId?: string; from?: string; to?: string }
 // Build the Prisma where-clause: always tenant-scoped, plus optional vehicle/date.
 function buildWhere(type: DataType, tenantId: string, filter: Filter): any {
   const cfg = CONFIG[type]
-  const where: any = { Vehicle: { TenantId: tenantId } }
+  const where: any = tenantScope(type, tenantId)
   if (filter.vehicleId) where.VehicleId = filter.vehicleId
   const range: any = {}
   if (filter.from) { const d = new Date(filter.from); if (!isNaN(d.getTime())) range.gte = d }
@@ -90,7 +95,7 @@ export async function listRecords(type: DataType, tenantId: string, filter: Filt
     rows: rows.map((r: any) => ({
       id: r[cfg.id],
       date: r[cfg.date] instanceof Date ? r[cfg.date].toISOString() : null,
-      vehicle: plateLabel(r.Vehicle),
+      vehicle: r.Vehicle ? plateLabel(r.Vehicle) : (r.SourceLabel || '-'),
       summary: cfg.summary(r),
     })),
   }
@@ -99,7 +104,7 @@ export async function listRecords(type: DataType, tenantId: string, filter: Filt
 export async function previewCount(type: DataType, tenantId: string, body: { ids?: string[]; filter?: Filter }): Promise<number> {
   const cfg = CONFIG[type]
   if (body.ids && body.ids.length) {
-    return (db as any)[cfg.model].count({ where: { [cfg.id]: { in: body.ids }, Vehicle: { TenantId: tenantId } } })
+    return (db as any)[cfg.model].count({ where: { [cfg.id]: { in: body.ids }, ...tenantScope(type, tenantId) } })
   }
   return (db as any)[cfg.model].count({ where: buildWhere(type, tenantId, body.filter ?? {}) })
 }
@@ -110,7 +115,7 @@ export async function previewCount(type: DataType, tenantId: string, body: { ids
 export async function deleteRecords(type: DataType, tenantId: string, body: { ids?: string[]; filter?: Filter; allowAll?: boolean }): Promise<number> {
   const cfg = CONFIG[type]
   if (body.ids && body.ids.length) {
-    const res = await (db as any)[cfg.model].deleteMany({ where: { [cfg.id]: { in: body.ids }, Vehicle: { TenantId: tenantId } } })
+    const res = await (db as any)[cfg.model].deleteMany({ where: { [cfg.id]: { in: body.ids }, ...tenantScope(type, tenantId) } })
     return res.count
   }
   const filter = body.filter ?? {}

@@ -66,4 +66,5 @@ export type VehicleSummary = {
   license: string;
   income: number;
   outgoings: number;
+  unlinked?: boolean;
 }

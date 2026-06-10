@@ -277,10 +277,7 @@ const SweetAlert = forwardRef<SweetAlertHandle, SweetAlertProps>(
 						style={style}
 					>
 						{title ? (
-							<div
-								dangerouslySetInnerHTML={{ __html: title }}
-								className="swal-title"
-							/>
+							<div className="swal-title">{title}</div>
 						) : null}
 
 						{icon && (
@@ -294,10 +291,7 @@ const SweetAlert = forwardRef<SweetAlertHandle, SweetAlertProps>(
 						) : null}
 
 						{text ? (
-							<div
-								dangerouslySetInnerHTML={{ __html: text }}
-								className="swal-text"
-							/>
+							<div className="swal-text">{text}</div>
 						) : null}
 
 						{custom}

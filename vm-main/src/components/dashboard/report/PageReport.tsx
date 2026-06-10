@@ -266,7 +266,7 @@ export default function PageReport(): React.JSX.Element {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {!fuelLoading && fuelRows.length === 0 ? (
+                {!fuelLoading && sortedFuel.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={FUEL_HEADERS.length} align="center" sx={{ color: 'text.secondary', py: 4 }}>
                       ไม่มีข้อมูลในช่วงวันที่ที่เลือก
@@ -300,7 +300,7 @@ export default function PageReport(): React.JSX.Element {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {!incomeLoading && incomeRows.length === 0 ? (
+                {!incomeLoading && sortedIncome.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={INCOME_HEADERS.length} align="center" sx={{ color: 'text.secondary', py: 4 }}>
                       ไม่มีข้อมูลในช่วงวันที่ที่เลือก
@@ -308,7 +308,7 @@ export default function PageReport(): React.JSX.Element {
                   </TableRow>
                 ) : null}
                 {sortedIncome.map((r) => (
-                  <TableRow hover key={r.vehicleId}>
+                  <TableRow hover key={r.id}>
                     {INCOME_HEADERS.map((h) => (
                       <TableCell key={h.key}>{h.money ? numberFormat(r[h.key] as number) : String(r[h.key] ?? '-')}</TableCell>
                     ))}

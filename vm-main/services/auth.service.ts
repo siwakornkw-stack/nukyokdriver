@@ -47,8 +47,6 @@ export async function login(data: LoginRequestData): Promise<WrapResponse<LoginR
 				localStorage.setItem('customer_id', customer_id);
 				localStorage.setItem('access_token', access_token);
 				localStorage.setItem('refresh_token', refresh_token);
-
-				console.log('login', result.data);
 			} catch (error) {
 				console.error('Error setting cookies:', error);
 				localStorage.clear();
@@ -90,8 +88,6 @@ export async function signUp(data: SignUpRequestData): Promise<WrapResponse<Sign
 				localStorage.setItem('customer_id', customer_id);
 				localStorage.setItem('access_token', access_token);
 				localStorage.setItem('refresh_token', refresh_token);
-
-				console.log('login', result.data);
 			} catch (error) {
 				console.error('Error setting cookies:', error);
 				localStorage.clear();
@@ -108,14 +104,13 @@ export async function signUp(data: SignUpRequestData): Promise<WrapResponse<Sign
 export async function getUser(): Promise<WrapResponse<UserResponse>> {
 	try {
 		const accessToken = Cookies.get('access_token');
-		console.log('accessToken', accessToken);
 		if (!accessToken)
 			return wrapResponse({ status: 401, message: 'Unauthorized' });
         const domain = getDomain();
 		console.log('domain', domain);
 		if (!domain)
 			return wrapResponse({ status: 401, message: 'Unauthorized' });
-		
+
 		const response = await fetch(`${urlApi}/users`, {
 			method: 'GET',
 			headers: {
@@ -139,14 +134,13 @@ export async function getUser(): Promise<WrapResponse<UserResponse>> {
 export async function checkLine(): Promise<WrapResponse<CheckLineResponse>> {
 	try {
 		const accessToken = Cookies.get('access_token');
-		console.log('accessToken', accessToken);
 		if (!accessToken)
 			return wrapResponse({ status: 401, message: 'Unauthorized' });
         const domain = getDomain();
 		console.log('domain', domain);
 		if (!domain)
 			return wrapResponse({ status: 401, message: 'Unauthorized' });
-		
+
 		const response = await fetch(`${urlApi}/users/check-line`, {
 			method: 'GET',
 			headers: {

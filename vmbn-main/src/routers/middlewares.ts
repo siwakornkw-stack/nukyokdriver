@@ -26,7 +26,7 @@ export function errorHandler(
   res.json({
     status: statusCode,
     message: err.message,
-    stack: config.environment === 'production' ? '🥞' : err.stack,
+    stack: config.environment === 'development' ? err.stack : '🥞',
   })
 }
 

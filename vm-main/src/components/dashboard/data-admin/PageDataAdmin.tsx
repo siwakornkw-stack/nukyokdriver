@@ -31,6 +31,7 @@ import {
   getDataTypes, listData, previewDelete, deleteData,
   type DataType, type DataTypeOption, type DataRow, type DataFilter,
 } from '../../../../services/data-admin.service';
+import { getImportHistory, type ImportBatch } from '../../../../services/import-data.service';
 
 interface VehicleOpt { id: string; label: string }
 
@@ -38,6 +39,24 @@ const fmtDate = (iso: string | null): string => {
   if (!iso) return '-';
   const d = new Date(iso);
   return isNaN(d.getTime()) ? '-' : d.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' });
+};
+
+const fmtDateTime = (iso: string): string => {
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? iso : d.toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' });
+};
+
+const fmtMoney = (n: number): string => n.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtRows = (n: number): string => n.toLocaleString('th-TH');
+
+// One-line plain-Thai summary of what an import did: file total vs what actually
+// entered the DB, and why the rest was cut (in-file duplicates / already present).
+const buildNote = (b: ImportBatch): string => {
+  const head = `ในไฟล์ ${fmtRows(b.fileRows)} แถว ${fmtMoney(b.fileSum)} บาท → เข้า DB จริง ${fmtRows(b.createdRows)} แถว ${fmtMoney(b.createdSum)} บาท`;
+  const parts: string[] = [];
+  if (b.dupRows > 0) parts.push(`ตัดซ้ำในไฟล์ ${fmtRows(b.dupRows)} แถว ${fmtMoney(b.dupSum)} บาท (invoice+วันที่+ยอด+รายการ เหมือนกันเป๊ะ dedup ตัดออก)`);
+  if (b.existRows > 0) parts.push(`มีใน DB อยู่แล้ว ${fmtRows(b.existRows)} แถว ${fmtMoney(b.existSum)} บาท (re-upload ข้าม)`);
+  return parts.length ? `${head} — ${parts.join(', ')}` : `${head} — ตรงกันทั้งหมด ไม่มีแถวซ้ำ`;
 };
 
 export default function PageDataAdmin(): React.JSX.Element {
@@ -55,6 +74,9 @@ export default function PageDataAdmin(): React.JSX.Element {
   const [confirm, setConfirm] = React.useState<{ mode: 'selected' | 'filter'; count: number } | null>(null);
   const [deleting, setDeleting] = React.useState(false);
 
+  // import history
+  const [history, setHistory] = React.useState<ImportBatch[]>([]);
+
   React.useEffect(() => {
     void (async () => {
       setTypes(await getDataTypes());
@@ -64,6 +86,7 @@ export default function PageDataAdmin(): React.JSX.Element {
         id: v.id,
         label: [v.licensePlatePrefix, v.licensePlateSuffix].filter(Boolean).join(' ').trim() || v.model || v.id,
       })));
+      try { setHistory(await getImportHistory()); } catch { /* ignore */ }
     })();
   }, []);
 
@@ -203,6 +226,50 @@ export default function PageDataAdmin(): React.JSX.Element {
               </Typography>
             </CardContent>
           ) : null}
+        </Card>
+      ) : null}
+
+      {history.length > 0 ? (
+        <Card>
+          <CardHeader title={`ประวัติการ import รายได้ (${history.length} ครั้ง)`} subheader="แต่ละครั้งที่นำเข้า — เทียบยอดในไฟล์ vs ที่เข้า DB จริง และส่วนที่ตัดซ้ำ/มีอยู่แล้ว ล่าสุดอยู่บนสุด" />
+          <Divider />
+          <Box sx={{ overflowX: 'auto' }}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>เวลานำเข้า</TableCell>
+                  <TableCell>ไฟล์</TableCell>
+                  <TableCell>ผู้ใช้</TableCell>
+                  <TableCell align="right">ในไฟล์</TableCell>
+                  <TableCell align="right">เข้า DB</TableCell>
+                  <TableCell align="right">ตัดซ้ำในไฟล์</TableCell>
+                  <TableCell align="right">มีอยู่แล้ว</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {history.map((b, i) => (
+                  <React.Fragment key={`${b.time}|${b.user}|${i}`}>
+                    <TableRow>
+                      <TableCell sx={{ borderBottom: 'none' }}>{fmtDateTime(b.time)}</TableCell>
+                      <TableCell sx={{ borderBottom: 'none' }}>{b.fileName ?? '-'}</TableCell>
+                      <TableCell sx={{ borderBottom: 'none' }}>{b.user}</TableCell>
+                      <TableCell align="right" sx={{ borderBottom: 'none' }}>{fmtRows(b.fileRows)} แถว<br />{fmtMoney(b.fileSum)}</TableCell>
+                      <TableCell align="right" sx={{ borderBottom: 'none' }}>{fmtRows(b.createdRows)} แถว<br />{fmtMoney(b.createdSum)}</TableCell>
+                      <TableCell align="right" sx={{ borderBottom: 'none' }}>{b.dupRows > 0 ? <>{fmtRows(b.dupRows)} แถว<br />{fmtMoney(b.dupSum)}</> : '-'}</TableCell>
+                      <TableCell align="right" sx={{ borderBottom: 'none' }}>{b.existRows > 0 ? <>{fmtRows(b.existRows)} แถว<br />{fmtMoney(b.existSum)}</> : '-'}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell colSpan={7} sx={{ pt: 0 }}>
+                        <Typography variant="caption" color={b.dupRows > 0 ? 'error' : 'text.secondary'}>
+                          หมายเหตุ: {buildNote(b)}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  </React.Fragment>
+                ))}
+              </TableBody>
+            </Table>
+          </Box>
         </Card>
       ) : null}
 

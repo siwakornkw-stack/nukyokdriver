@@ -93,8 +93,37 @@ export async function getIncomeSummaryService(
       }
     })
 
+    // รายได้ที่ไม่ผูกกับรถ (ทะเบียนเป็น job-label เช่น รื้อถอน/ทำถนน/งานขนขยะ)
+    // จัดกลุ่มตาม SourceLabel แล้วแสดงเป็นแถวแยกในรายงาน
+    const unlinked = await prisma.incomeVehicle.findMany({
+      where: { ...dateFilter, VehicleId: null, TenantId: tenantId },
+      orderBy: { DateTime: 'desc' }
+    })
+    const groups = new Map<string, typeof unlinked>()
+    for (const r of unlinked) {
+      const k = r.SourceLabel || 'ไม่ระบุ'
+      if (!groups.has(k)) groups.set(k, [])
+      groups.get(k)!.push(r)
+    }
+    const unlinkedRows: IncomeSummaryRow[] = Array.from(groups.entries()).map(([label, items], i) => {
+      const totalIncome = items.reduce((s, x) => s + Number(x.AmountReceive), 0)
+      const totalTrips = items.length
+      return {
+        id: 1000000 + i,
+        vehicleId: '',
+        licensePlate: label,
+        vehicleType: 'รายได้ไม่ผูกรถ',
+        driverName: '-',
+        totalIncome,
+        totalTrips,
+        averageIncome: totalTrips > 0 ? Math.round(totalIncome / totalTrips) : 0,
+        lastTripDate: items[0].DateTime.toISOString().split('T')[0],
+        status: '-'
+      }
+    })
+
     // เรียงลำดับตาม totalIncome จากมากไปน้อย
-    return summaryData.sort((a, b) => b.totalIncome - a.totalIncome)
+    return [...summaryData, ...unlinkedRows].sort((a, b) => b.totalIncome - a.totalIncome)
 
   } catch (error) {
     console.error('Error in getIncomeSummaryService:', error)

@@ -34,7 +34,6 @@ export async function getVehicleAll(sortBy?: string, sortOrder?: string, limit?:
 export async function getOption(): Promise<WrapResponse<OptionResponse | null>> {
     try {
         const accessToken = Cookies.get('access_token');
-        console.log('accessToken', accessToken);
         if (!accessToken)
             return wrapResponse({ status: 401, message: 'Unauthorized' });
         const domain = getDomain();
@@ -62,7 +61,6 @@ export async function getOption(): Promise<WrapResponse<OptionResponse | null>> 
 export async function getOptionDriver(): Promise<WrapResponse<OptionOneResponse | null>> {
     try {
         const accessToken = Cookies.get('access_token');
-        console.log('accessToken', accessToken);
         if (!accessToken)
             return wrapResponse({ status: 401, message: 'Unauthorized' });
         const domain = getDomain();
@@ -90,7 +88,6 @@ export async function getOptionDriver(): Promise<WrapResponse<OptionOneResponse 
 export async function getOptionPaymentStatus(): Promise<WrapResponse<OptionOneResponse | null>> {
     try {
         const accessToken = Cookies.get('access_token');
-        console.log('accessToken', accessToken);
         if (!accessToken)
             return wrapResponse({ status: 401, message: 'Unauthorized' });
         const domain = getDomain();

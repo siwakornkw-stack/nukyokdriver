@@ -367,7 +367,7 @@ export async function updateVehicle(req: IGetUserAuthInfoRequest, res: Response,
       UpdatedAt: new Date()
     }
     console.log('Sending payload:', payload);
-    const response = await vehicleServices.updateVehicleService(payload)
+    const response = await vehicleServices.updateVehicleService(payload, parsedToken.tenantId)
     console.log('Service response:', response);
 
     if (!response) throw new Error('Failed to update vehicle')
@@ -418,7 +418,7 @@ export async function getTaxByIdVehicle(req: IGetUserAuthInfoRequest, res: Respo
     const id = req.params.id
     if (!id) throw new Error('Vehicle id is required')
 
-    const response = await vehicleServices.getTaxByIdVehicleService(id)
+    const response = await vehicleServices.getTaxByIdVehicleService(id, parsedToken.tenantId)
 
     if (!response) throw new Error('Failed to get tax by id vehicle')
 
@@ -531,7 +531,7 @@ export async function updateVehicleTax(req: IGetUserAuthInfoRequest, res: Respon
       UpdatedByUsername: parsedToken.username
     }
     console.log('Sending payload:', payload);
-    const response = await vehicleServices.updateVehicleTaxService(payload, id)
+    const response = await vehicleServices.updateVehicleTaxService(payload, id, parsedToken.tenantId)
     console.log('Service response:', response);
 
     res.json({
@@ -558,7 +558,7 @@ export async function getCompulsoryMotorInsuranceByIdVehicle(req: IGetUserAuthIn
     const id = req.params.id
     if (!id) throw new Error('Vehicle id is required')
 
-    const response = await vehicleServices.getCompulsoryMotorInsuranceByIdVehicleService(id)
+    const response = await vehicleServices.getCompulsoryMotorInsuranceByIdVehicleService(id, parsedToken.tenantId)
 
     if (!response) throw new Error('Failed to get compulsory motor insurance by id vehicle')
 
@@ -639,7 +639,7 @@ export async function updateCompulsoryMotorInsuranceVehicle(req: IGetUserAuthInf
       UpdatedByUsername: parsedToken.username
     }
     console.log('Sending payload:', payload);
-    const response = await vehicleServices.updateCompulsoryMotorInsuranceVehicleService(payload, id)
+    const response = await vehicleServices.updateCompulsoryMotorInsuranceVehicleService(payload, id, parsedToken.tenantId)
     console.log('Service response:', response);
 
     res.json({
@@ -666,7 +666,7 @@ export async function getInsurancePolicyByIdVehicle(req: IGetUserAuthInfoRequest
     const id = req.params.id
     if (!id) throw new Error('Vehicle id is required')
 
-    const response = await vehicleServices.getInsurancePolicyByIdVehicleService(id)
+    const response = await vehicleServices.getInsurancePolicyByIdVehicleService(id, parsedToken.tenantId)
 
     if (!response) throw new Error('Failed to get insurance policy by id vehicle')
 
@@ -751,7 +751,7 @@ export async function updateInsurancePolicyVehicle(req: IGetUserAuthInfoRequest,
       UpdatedByUsername: parsedToken.username
     }
     console.log('Sending payload:', payload);
-    const response = await vehicleServices.updateInsurancePolicyVehicleService(payload, id)
+    const response = await vehicleServices.updateInsurancePolicyVehicleService(payload, id, parsedToken.tenantId)
     console.log('Service response:', response);
 
     res.json({
@@ -778,7 +778,7 @@ export async function getAttachFileByIdVehicle(req: IGetUserAuthInfoRequest, res
     const id = req.params.id
     if (!id) throw new Error('Vehicle id is required')
 
-    const response = await vehicleServices.getAttachFileByIdVehicleService(id)
+    const response = await vehicleServices.getAttachFileByIdVehicleService(id, parsedToken.tenantId)
 
     if (!response) throw new Error('Failed to get attach file by id vehicle')
 
@@ -856,7 +856,7 @@ export async function updateAttachFileVehicle(req: IGetUserAuthInfoRequest, res:
       UpdatedByUsername: parsedToken.username
     }
     console.log('Sending payload:', payload);
-    const response = await vehicleServices.updateAttachFileVehicleService(payload, id)
+    const response = await vehicleServices.updateAttachFileVehicleService(payload, id, parsedToken.tenantId)
     console.log('Service response:', response);
 
     res.json({
@@ -885,7 +885,7 @@ export async function getCarTiresByIdVehicle(req: IGetUserAuthInfoRequest, res: 
     const id = req.params.id
     if (!id) throw new Error('Vehicle id is required')
 
-    const response = await vehicleServices.getCarTiresByIdVehicleService(id)
+    const response = await vehicleServices.getCarTiresByIdVehicleService(id, parsedToken.tenantId)
 
     if (!response) throw new Error('Failed to get car tires by id vehicle')
 
@@ -960,7 +960,7 @@ export async function updateCarTires(req: IGetUserAuthInfoRequest, res: Response
       UpdatedByUsername: parsedToken.username
     }
     console.log('Sending payload:', payload);
-    const response = await vehicleServices.updateCarTiresService(payload, id)
+    const response = await vehicleServices.updateCarTiresService(payload, id, parsedToken.tenantId)
     console.log('Service response:', response);
 
     res.json({
@@ -987,7 +987,7 @@ export async function getAccidentVehicleByIdVehicle(req: IGetUserAuthInfoRequest
     const id = req.params.id
     if (!id) throw new Error('Vehicle id is required')
 
-    const response = await vehicleServices.getAccidentVehicleByIdVehicleService(id)
+    const response = await vehicleServices.getAccidentVehicleByIdVehicleService(id, parsedToken.tenantId)
 
     if (!response) throw new Error('Failed to get accident vehicle by id vehicle')
 
@@ -1072,7 +1072,7 @@ export async function updateAccidentVehicle(req: IGetUserAuthInfoRequest, res: R
       UpdatedByUsername: parsedToken.username
     }
     console.log('Sending payload:', payload);
-    const response = await vehicleServices.updateAccidentVehicleService(payload, id)
+    const response = await vehicleServices.updateAccidentVehicleService(payload, id, parsedToken.tenantId)
     console.log('Service response:', response);
 
     res.json({
@@ -1099,7 +1099,7 @@ export async function getRepairVehicleByIdVehicle(req: IGetUserAuthInfoRequest, 
     const id = req.params.id
     if (!id) throw new Error('Vehicle id is required')
 
-    const response = await vehicleServices.getRepairVehicleByIdVehicleService(id)
+    const response = await vehicleServices.getRepairVehicleByIdVehicleService(id, parsedToken.tenantId)
 
     if (!response) throw new Error('Failed to get repair vehicle by id vehicle')
 
@@ -1180,7 +1180,7 @@ export async function updateRepairVehicle(req: IGetUserAuthInfoRequest, res: Res
       UpdatedByUsername: parsedToken.username
     }
     console.log('Sending payload:', payload);
-    const response = await vehicleServices.updateRepairVehicleService(payload, id)
+    const response = await vehicleServices.updateRepairVehicleService(payload, id, parsedToken.tenantId)
     console.log('Service response:', response);
 
     res.json({
@@ -1207,7 +1207,7 @@ export async function getGasolineCostByIdVehicle(req: IGetUserAuthInfoRequest, r
     const id = req.params.id
     if (!id) throw new Error('Vehicle id is required')
 
-    const response = await vehicleServices.getGasolineCostByIdVehicleService(id)
+    const response = await vehicleServices.getGasolineCostByIdVehicleService(id, parsedToken.tenantId)
 
     if (!response) throw new Error('Failed to get gasoline cost by id vehicle')
 
@@ -1288,7 +1288,7 @@ export async function updateGasolineCost(req: IGetUserAuthInfoRequest, res: Resp
       DateTime: new Date(data.dateTime),
     }
     console.log('Sending payload:', payload);
-    const response = await vehicleServices.updateGasolineCostService(payload, id)
+    const response = await vehicleServices.updateGasolineCostService(payload, id, parsedToken.tenantId)
     console.log('Service response:', response);
 
     res.json({
@@ -1315,7 +1315,7 @@ export async function getDrainTheOilVehicleByIdVehicle(req: IGetUserAuthInfoRequ
     const id = req.params.id
     if (!id) throw new Error('Vehicle id is required')
 
-    const response = await vehicleServices.getDrainTheOilVehicleByIdVehicleService(id)
+    const response = await vehicleServices.getDrainTheOilVehicleByIdVehicleService(id, parsedToken.tenantId)
 
     if (!response) throw new Error('Failed to get drain the oil vehicle by id vehicle')
 
@@ -1392,7 +1392,7 @@ export async function updateDrainTheOilVehicle(req: IGetUserAuthInfoRequest, res
       UpdatedByUsername: parsedToken.username
     }
     console.log('Sending payload:', payload);
-    const response = await vehicleServices.updateDrainTheOilVehicleService(payload, id)
+    const response = await vehicleServices.updateDrainTheOilVehicleService(payload, id, parsedToken.tenantId)
     console.log('Service response:', response);
 
     res.json({
@@ -1419,7 +1419,7 @@ export async function getInstallmentsVehicleByIdVehicle(req: IGetUserAuthInfoReq
     const id = req.params.id
     if (!id) throw new Error('Vehicle id is required')
 
-    const response = await vehicleServices.getInstallmentsVehicleByIdVehicleService(id)
+    const response = await vehicleServices.getInstallmentsVehicleByIdVehicleService(id, parsedToken.tenantId)
 
     if (!response) throw new Error('Failed to get installments vehicle by id vehicle')
 
@@ -1498,7 +1498,7 @@ export async function updateInstallmentsVehicle(req: IGetUserAuthInfoRequest, re
       UpdatedByUsername: parsedToken.username
     }
     console.log('Sending payload:', payload);
-    const response = await vehicleServices.updateInstallmentsVehicleService(payload, id)
+    const response = await vehicleServices.updateInstallmentsVehicleService(payload, id, parsedToken.tenantId)
     console.log('Service response:', response);
 
     res.json({
@@ -1525,7 +1525,7 @@ export async function getImageVehicleByIdVehicle(req: IGetUserAuthInfoRequest, r
     const id = req.params.id
     if (!id) throw new Error('Vehicle id is required')
 
-    const response = await vehicleServices.getImageVehicleByIdVehicleService(id)
+    const response = await vehicleServices.getImageVehicleByIdVehicleService(id, parsedToken.tenantId)
 
     if (!response) throw new Error('Failed to get image vehicle by id vehicle')
 
@@ -1604,7 +1604,7 @@ export async function updateImageVehicle(req: IGetUserAuthInfoRequest, res: Resp
       UpdatedByUsername: parsedToken.username
     }
     console.log('Sending payload:', payload);
-    const response = await vehicleServices.updateImageVehicleService(payload, id)
+    const response = await vehicleServices.updateImageVehicleService(payload, id, parsedToken.tenantId)
     console.log('Service response:', response);
 
     res.json({
@@ -1633,7 +1633,7 @@ export async function getIncomeVehicleByIdVehicle(req: IGetUserAuthInfoRequest, 
     const id = req.params.id
     if (!id) throw new Error('Vehicle id is required')
 
-    const response = await vehicleServices.getIncomeVehicleByIdVehicleService(id)
+    const response = await vehicleServices.getIncomeVehicleByIdVehicleService(id, parsedToken.tenantId)
 
     if (!response) throw new Error('Failed to get income vehicle by id vehicle')
 
@@ -1730,7 +1730,7 @@ export async function updateIncomeVehicle(req: IGetUserAuthInfoRequest, res: Res
       },
     }
     console.log('Sending payload:', payload);
-    const response = await vehicleServices.updateIncomeVehicleService(payload, id)
+    const response = await vehicleServices.updateIncomeVehicleService(payload, id, parsedToken.tenantId)
     console.log('Service response:', response);
 
     res.json({
@@ -2966,7 +2966,7 @@ export async function importTax(req: IGetUserAuthInfoRequest, res: Response, nex
     const id = req.params.id;
     if (!id) throw new Error('Vehicle id is required');
 
-    const vehicle = await vehicleServices.findVehicleById(id);
+    const vehicle = await vehicleServices.findVehicleById(id, parsedToken.tenantId);
 
     if (!vehicle) {
       throw new Error('ไม่พบข้อมูลรถยนต์ในระบบ');
@@ -3046,7 +3046,7 @@ export async function importTax(req: IGetUserAuthInfoRequest, res: Response, nex
         processedYears.add(taxData.Year);
 
         // ตรวจสอบว่าปีภาษีซ้ำกับที่มีในฐานข้อมูลหรือไม่
-        const existingTaxes = await vehicleServices.getTaxByIdVehicleService(vehicle.VehicleId);
+        const existingTaxes = await vehicleServices.getTaxByIdVehicleService(vehicle.VehicleId, parsedToken.tenantId);
         const isDuplicateYear = existingTaxes.some(tax => tax.year === taxData.Year);
         if (isDuplicateYear) {
           throw new Error(`ปีภาษี ${taxData.Year} มีอยู่ในระบบแล้ว`);
@@ -3151,7 +3151,7 @@ export async function importCompulsoryMotorInsurance(req: IGetUserAuthInfoReques
       throw new Error('ไม่พบรหัสรถยนต์');
     }
 
-    const vehicle = await vehicleServices.findVehicleById(vehicleId);
+    const vehicle = await vehicleServices.findVehicleById(vehicleId, parsedToken.tenantId);
     if (!vehicle) {
       throw new Error('ไม่พบข้อมูลรถยนต์');
     }
@@ -3222,7 +3222,7 @@ export async function importCompulsoryMotorInsurance(req: IGetUserAuthInfoReques
         processedYears.add(insuranceData.Year);
 
         // ตรวจสอบว่าปีซ้ำกับที่มีในฐานข้อมูลหรือไม่
-        const existingInsurances = await vehicleServices.getCompulsoryMotorInsuranceByIdVehicleService(vehicle.VehicleId);
+        const existingInsurances = await vehicleServices.getCompulsoryMotorInsuranceByIdVehicleService(vehicle.VehicleId, parsedToken.tenantId);
         const isDuplicateYear = existingInsurances.some(insurance => insurance.year === insuranceData.Year);
         if (isDuplicateYear) {
           throw new Error(`ปี ${insuranceData.Year} มีอยู่ในระบบแล้ว`);
@@ -3319,7 +3319,7 @@ export async function importInsurancePolicy(req: IGetUserAuthInfoRequest, res: R
       throw new Error('ไม่พบรหัสรถยนต์');
     }
 
-    const vehicle = await vehicleServices.findVehicleById(vehicleId);
+    const vehicle = await vehicleServices.findVehicleById(vehicleId, parsedToken.tenantId);
     if (!vehicle) {
       throw new Error('ไม่พบข้อมูลรถยนต์');
     }
@@ -3399,7 +3399,7 @@ export async function importInsurancePolicy(req: IGetUserAuthInfoRequest, res: R
         processedYears.add(insuranceData.Year);
 
         // ตรวจสอบว่าปีซ้ำกับที่มีในฐานข้อมูลหรือไม่
-        const existingInsurances = await vehicleServices.getInsurancePolicyByIdVehicleService(vehicle.VehicleId);
+        const existingInsurances = await vehicleServices.getInsurancePolicyByIdVehicleService(vehicle.VehicleId, parsedToken.tenantId);
         const isDuplicateYear = existingInsurances.some(insurance => insurance.year === insuranceData.Year);
         if (isDuplicateYear) {
           throw new Error(`ปี ${insuranceData.Year} มีอยู่ในระบบแล้ว`);
@@ -3496,7 +3496,7 @@ export async function importCarTires(req: IGetUserAuthInfoRequest, res: Response
       throw new Error('ไม่พบรหัสรถยนต์');
     }
 
-    const vehicle = await vehicleServices.findVehicleById(vehicleId);
+    const vehicle = await vehicleServices.findVehicleById(vehicleId, parsedToken.tenantId);
     if (!vehicle) {
       throw new Error('ไม่พบข้อมูลรถยนต์');
     }
@@ -3638,7 +3638,7 @@ export async function importAccidentVehicle(req: IGetUserAuthInfoRequest, res: R
       throw new Error('ไม่พบรหัสรถยนต์');
     }
 
-    const vehicle = await vehicleServices.findVehicleById(vehicleId);
+    const vehicle = await vehicleServices.findVehicleById(vehicleId, parsedToken.tenantId);
     if (!vehicle) {
       throw new Error('ไม่พบข้อมูลรถยนต์');
     }
@@ -3699,7 +3699,7 @@ export async function importAccidentVehicle(req: IGetUserAuthInfoRequest, res: R
         }
         processedDates.add(accidentDate);
 
-        const existingAccidents = await vehicleServices.getAccidentVehicleByIdVehicleService(vehicle.VehicleId);
+        const existingAccidents = await vehicleServices.getAccidentVehicleByIdVehicleService(vehicle.VehicleId, parsedToken.tenantId);
         const isDuplicateDate = existingAccidents.some(accident =>
           new Date(accident.date).toISOString().split('T')[0] === accidentDate
         );
@@ -3798,7 +3798,7 @@ export async function importRepairVehicle(req: IGetUserAuthInfoRequest, res: Res
       throw new Error('ไม่พบรหัสรถยนต์');
     }
 
-    const vehicle = await vehicleServices.findVehicleById(vehicleId);
+    const vehicle = await vehicleServices.findVehicleById(vehicleId, parsedToken.tenantId);
     if (!vehicle) {
       throw new Error('ไม่พบข้อมูลรถยนต์');
     }
@@ -3858,7 +3858,7 @@ export async function importRepairVehicle(req: IGetUserAuthInfoRequest, res: Res
         }
         processedDates.add(repairDate);
 
-        const existingRepairs = await vehicleServices.getRepairVehicleByIdVehicleService(vehicle.VehicleId);
+        const existingRepairs = await vehicleServices.getRepairVehicleByIdVehicleService(vehicle.VehicleId, parsedToken.tenantId);
         const isDuplicateDate = existingRepairs.some(repair =>
           new Date(repair.repairDate).toISOString().split('T')[0] === repairDate
         );
@@ -3948,7 +3948,7 @@ export async function importGasolineCost(req: IGetUserAuthInfoRequest, res: Resp
       throw new Error('ไม่พบรหัสรถยนต์');
     }
 
-    const vehicle = await vehicleServices.findVehicleById(vehicleId);
+    const vehicle = await vehicleServices.findVehicleById(vehicleId, parsedToken.tenantId);
     if (!vehicle) {
       throw new Error('ไม่พบข้อมูลรถยนต์');
     }
@@ -4017,7 +4017,7 @@ export async function importGasolineCost(req: IGetUserAuthInfoRequest, res: Resp
         }
         processedDates.add(gasolineDate);
 
-        const existingGasolineCosts = await vehicleServices.getGasolineCostByIdVehicleService(vehicle.VehicleId);
+        const existingGasolineCosts = await vehicleServices.getGasolineCostByIdVehicleService(vehicle.VehicleId, parsedToken.tenantId);
         const isDuplicateDate = existingGasolineCosts.some(gasoline => 
           new Date(gasoline.item).toISOString().split('T')[0] === gasolineDate
         );
@@ -4107,7 +4107,7 @@ export async function importDrainOil(req: IGetUserAuthInfoRequest, res: Response
       throw new Error('ไม่พบรหัสรถยนต์');
     }
 
-    const vehicle = await vehicleServices.findVehicleById(vehicleId);
+    const vehicle = await vehicleServices.findVehicleById(vehicleId, parsedToken.tenantId);
     if (!vehicle) {
       throw new Error('ไม่พบข้อมูลรถยนต์');
     }
@@ -4161,7 +4161,7 @@ export async function importDrainOil(req: IGetUserAuthInfoRequest, res: Response
         }
         processedDates.add(drainOilDate);
 
-        const existingDrainOils = await vehicleServices.getDrainTheOilVehicleByIdVehicleService(vehicle.VehicleId);
+        const existingDrainOils = await vehicleServices.getDrainTheOilVehicleByIdVehicleService(vehicle.VehicleId, parsedToken.tenantId);
         const isDuplicateDate = existingDrainOils.some(drainOil =>
           new Date(drainOil.date).toISOString().split('T')[0] === drainOilDate
         );
@@ -4251,7 +4251,7 @@ export async function importInstallments(req: IGetUserAuthInfoRequest, res: Resp
       throw new Error('ไม่พบรหัสรถยนต์');
     }
 
-    const vehicle = await vehicleServices.findVehicleById(vehicleId);
+    const vehicle = await vehicleServices.findVehicleById(vehicleId, parsedToken.tenantId);
     if (!vehicle) {
       throw new Error('ไม่พบข้อมูลรถยนต์');
     }
@@ -4309,7 +4309,7 @@ export async function importInstallments(req: IGetUserAuthInfoRequest, res: Resp
         }
         processedDates.add(installmentNumber);
 
-        const existingInstallments = await vehicleServices.getInstallmentsVehicleByIdVehicleService(vehicle.VehicleId);
+        const existingInstallments = await vehicleServices.getInstallmentsVehicleByIdVehicleService(vehicle.VehicleId, parsedToken.tenantId);
         const isDuplicate = existingInstallments.some(installment =>
           installment.installmentNumber === installmentNumber
         );
@@ -4399,7 +4399,7 @@ export async function importIncome(req: IGetUserAuthInfoRequest, res: Response, 
       throw new Error('ไม่พบรหัสรถยนต์');
     }
 
-    const vehicle = await vehicleServices.findVehicleById(vehicleId);
+    const vehicle = await vehicleServices.findVehicleById(vehicleId, parsedToken.tenantId);
     if (!vehicle) {
       throw new Error('ไม่พบข้อมูลรถยนต์');
     }
@@ -4485,7 +4485,7 @@ export async function importIncome(req: IGetUserAuthInfoRequest, res: Response, 
         }
         processedDates.add(incomeDate);
 
-        const existingIncomes = await vehicleServices.getIncomeVehicleByIdVehicleService(vehicle.VehicleId);
+        const existingIncomes = await vehicleServices.getIncomeVehicleByIdVehicleService(vehicle.VehicleId, parsedToken.tenantId);
         const isDuplicate = existingIncomes.some(income =>
           new Date(income.receiveDate).toISOString() === new Date(incomeDate).toISOString()
         );

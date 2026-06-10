@@ -123,9 +123,12 @@ const SYNONYMS: Record<string, string[]> = {
   datePay: ['วันจ่าย', 'วันที่จ่าย', 'วันชำระ'],
   incomeDescription: ['รายละเอียดงาน', 'รายละเอียด'],
   customerName: ['ชื่อลูกค้า', 'ลูกค้า'],
-  workOrderNumber: ['เลขใบสั่งงาน', 'ใบสั่งงาน', 'เลขที่งาน'],
+  workOrderNumber: ['เลขใบสั่งงาน', 'ใบสั่งงาน', 'เลขที่งาน', 'เลขที่ใบงาน', 'ใบงาน'],
   invoiceNumber: ['เลขใบแจ้งหนี้', 'ใบแจ้งหนี้', 'เลขที่บิล'],
-  amountReceive: ['จำนวนรับ', 'ยอดรับ', 'เงินที่ได้รับ'],
+  // "รวม" is the daily-summary income total column. liters ('จำนวนรับ (ลิตร)') and
+  // premium ('เบี้ยรวม') are defined earlier in this map, so they still win on fuel /
+  // vehicle sheets — only a bare "รวม" header falls through to amountReceive here.
+  amountReceive: ['จำนวนรับ', 'ยอดรับ', 'เงินที่ได้รับ', 'รวม'],
 }
 
 // Map a header cell to a canonical field name (or null).
@@ -166,6 +169,19 @@ export interface SheetResult {
   sub: number
   skipped: number
   errors: string[]
+  // Human-readable lines for rows the in-file dedup collapsed (same key twice in
+  // the upload). Distinct from `skipped`, which also counts re-upload/existing rows.
+  duplicates?: string[]
+  // Reconcile numbers (income only): file totals vs what entered the DB, and how
+  // much was cut as in-file duplicates or already-present (re-upload) rows.
+  stats?: ImportStats
+}
+
+export interface ImportStats {
+  fileRows: number; fileSum: number
+  createdSum: number
+  dupRows: number; dupSum: number
+  existRows: number; existSum: number
 }
 
 async function getOrCreateRef(
@@ -505,7 +521,7 @@ async function resolveSheetVehicle(tenantId: string, username: string | undefine
 }
 
 // Generic runner: build a record per row (or null to skip), then bulk-create.
-async function importCategory<T extends { VehicleId: string }>(
+async function importCategory<T extends { VehicleId?: string | null }>(
   tenantId: string, username: string | undefined, sheetName: string,
   rows: any[][], colMap: Record<string, number>,
   build: (row: any[], vid: string) => T | null,
@@ -513,7 +529,11 @@ async function importCategory<T extends { VehicleId: string }>(
   // Skip rows that already exist. `load` fetches existing rows for the involved
   // vehicles; `keyOf` builds the same natural key from both a DB row and a
   // to-create record. Without this, re-uploading the same file double-inserts.
-  dedup: { keyOf: (rec: any) => string; load: (vehicleIds: string[]) => Promise<any[]> },
+  dedup: { keyOf: (rec: any) => string; load: (vehicleIds: string[]) => Promise<any[]>; label?: (rec: any) => string; amount?: (rec: any) => number },
+  // Opt-in: when a row carries a vehicle identity that matches no vehicle, keep it
+  // (returning a record) instead of skipping. Income uses this to retain job-label
+  // rows (รื้อถอน/ทำถนน) as unlinked income; other categories pass nothing and skip.
+  onUnmatched?: (row: any[]) => T | null,
 ): Promise<CatResult> {
   const vmap = await loadVehicleMap(tenantId)
   // When rows carry no vehicle identity, the sheet name names the vehicle.
@@ -529,7 +549,12 @@ async function importCategory<T extends { VehicleId: string }>(
         if (sheetVid === undefined) sheetVid = await resolveSheetVehicle(tenantId, username, sheetName, vmap)
         vid = sheetVid
       }
-      if (!vid) { skipped++; continue }
+      if (!vid) {
+        const rec = onUnmatched ? onUnmatched(rows[i]) : null
+        if (!rec) { skipped++; continue }
+        toCreate.push(rec)
+        continue
+      }
       const rec = build(rows[i], vid)
       if (!rec) { skipped++; continue }
       toCreate.push(rec)
@@ -537,20 +562,33 @@ async function importCategory<T extends { VehicleId: string }>(
   }
 
   // Dedup against existing DB rows AND within this file (same key twice -> once).
+  // `existing` = already stored (re-upload); `seen` = first copy in this upload.
+  // A second copy whose key is only in `seen` is a genuine in-file duplicate, so
+  // we record a readable line for it (the importer's own keyOf is authoritative).
   let fresh = toCreate
+  const duplicates: string[] = []
+  const amt = dedup.amount ?? (() => 0)
+  let fileRows = 0, fileSum = 0, createdSum = 0, dupRows = 0, dupSum = 0, existRows = 0, existSum = 0
   if (toCreate.length) {
-    const vids = [...new Set(toCreate.map((r) => r.VehicleId))]
-    const seen = new Set<string>((await dedup.load(vids)).map(dedup.keyOf))
+    const vids = [...new Set(toCreate.map((r) => r.VehicleId).filter((v): v is string => !!v))]
+    const existing = new Set<string>((await dedup.load(vids)).map(dedup.keyOf))
+    const seen = new Set<string>()
     fresh = []
+    fileRows = toCreate.length
     for (const rec of toCreate) {
+      const a = amt(rec)
+      fileSum += a
       const k = dedup.keyOf(rec)
-      if (seen.has(k)) { skipped++; continue }
+      if (existing.has(k)) { skipped++; existRows++; existSum += a; continue }
+      if (seen.has(k)) { skipped++; dupRows++; dupSum += a; if (dedup.label) duplicates.push(`[${sheetName}] ${dedup.label(rec)}`); continue }
       seen.add(k)
+      createdSum += a
       fresh.push(rec)
     }
   }
   if (fresh.length) await create(fresh)
-  return { created: fresh.length, updated: 0, sub: 0, skipped, errors }
+  const stats: ImportStats | undefined = dedup.amount ? { fileRows, fileSum, createdSum, dupRows, dupSum, existRows, existSum } : undefined
+  return { created: fresh.length, updated: 0, sub: 0, skipped, errors, duplicates, stats }
 }
 
 function importRepair(tenantId: string, username: string | undefined, sheetName: string, rows: any[][], colMap: Record<string, number>): Promise<CatResult> {
@@ -604,13 +642,51 @@ function importInstallment(tenantId: string, username: string | undefined, sheet
   })
 }
 function importIncome(tenantId: string, username: string | undefined, sheetName: string, rows: any[][], colMap: Record<string, number>): Promise<CatResult> {
-  return importCategory<Prisma.IncomeVehicleCreateManyInput>(tenantId, username, sheetName, rows, colMap, (row, vid) => {
-    const d = dateOrNull(cell(row, colMap, 'scheduledAt')) ?? dateOrNull(cell(row, colMap, 'receiveDate')) ?? new Date()
-    return { VehicleId: vid, Status: 'active', Description: str(cell(row, colMap, 'incomeDescription')) || str(cell(row, colMap, 'note')), CustomerName: str(cell(row, colMap, 'customerName')) || null, DateTime: d, ReceiveDate: dateOrNull(cell(row, colMap, 'receiveDate')), Time: str(cell(row, colMap, 'accidentTime')), WorkOrderNumber: str(cell(row, colMap, 'workOrderNumber')), InvoiceNumber: str(cell(row, colMap, 'invoiceNumber')), AmountReceive: decOrZero(cell(row, colMap, 'amountReceive')) , CreatedByUsername: username ?? 'import' }
-  }, (data) => db.incomeVehicle.createMany({ data }), {
-    keyOf: (r) => `${r.VehicleId}|${str(r.InvoiceNumber)}|${str(r.WorkOrderNumber)}|${kdate(r.DateTime)}|${kdec(r.AmountReceive)}|${str(r.Description)}`,
-    load: (vids) => db.incomeVehicle.findMany({ where: { VehicleId: { in: vids } }, select: { VehicleId: true, InvoiceNumber: true, WorkOrderNumber: true, DateTime: true, AmountReceive: true, Description: true } }),
-  })
+  // Daily-summary sheets ("แบบสรุปงานรายวัน (6-69)") name the billing cycle:
+  // month 6, B.E. year 2569. Each row's date column holds only the day-of-month,
+  // and the cycle runs the 26th of the previous month to the 25th of the titled
+  // month, so a day >= 26 belongs to the previous month.
+  const cyc = str(sheetName).match(/\((\d{1,2})-(\d{2})\)/)
+  const cycMonth = cyc ? parseInt(cyc[1], 10) : 0
+  const cycYearBE = cyc ? 2500 + parseInt(cyc[2], 10) : 0
+  const dateFromDay = (day: number): Date | null => {
+    if (!cycMonth || day < 1 || day > 31) return null
+    let mo = cycMonth, yr = cycYearBE
+    if (day >= 26) { mo -= 1; if (mo < 1) { mo = 12; yr -= 1 } }
+    return new Date(Date.UTC(yr - 543, mo - 1, day))
+  }
+  // Build an income record. `vid` is the matched vehicle (or null for a job-label
+  // row); `label` is the ทะเบียน text to keep when there is no real vehicle.
+  const mk = (row: any[], vid: string | null, label: string | null): Prisma.IncomeVehicleCreateManyInput | null => {
+    const amount = decOrZero(cell(row, colMap, 'amountReceive'))
+    // Skip no-job / zero-income rows ("ไม่มีงาน", "รถซ่อม") that would otherwise
+    // import as a flood of 0-baht entries.
+    if (!(Number(amount) > 0)) return null
+    // The daily-summary date column holds only a day-of-month and its header
+    // varies ("วันที่" vs " วัน"), so the first column is the reliable source for
+    // the day. A real serial date (old English export) is still honoured first.
+    const d = dateOrNull(cell(row, colMap, 'scheduledAt'))
+      ?? dateOrNull(cell(row, colMap, 'receiveDate'))
+      ?? dateFromDay(int0(row[0]))
+      ?? new Date()
+    return { VehicleId: vid, TenantId: tenantId, SourceLabel: label, Status: 'active', Description: str(cell(row, colMap, 'incomeDescription')) || str(cell(row, colMap, 'note')), CustomerName: str(cell(row, colMap, 'customerName')) || null, DateTime: d, ReceiveDate: dateOrNull(cell(row, colMap, 'receiveDate')), Time: str(cell(row, colMap, 'accidentTime')), WorkOrderNumber: str(cell(row, colMap, 'workOrderNumber')), InvoiceNumber: str(cell(row, colMap, 'invoiceNumber')), AmountReceive: amount, CreatedByUsername: username ?? 'import' }
+  }
+  return importCategory<Prisma.IncomeVehicleCreateManyInput>(tenantId, username, sheetName, rows, colMap,
+    (row, vid) => mk(row, vid, null),
+    (data) => db.incomeVehicle.createMany({ data }), {
+    keyOf: (r) => `${r.VehicleId}|${str(r.SourceLabel)}|${str(r.InvoiceNumber)}|${str(r.WorkOrderNumber)}|${kdate(r.DateTime)}|${kdec(r.AmountReceive)}|${str(r.Description)}`,
+    load: (vids) => db.incomeVehicle.findMany({ where: { OR: [{ VehicleId: { in: vids } }, { VehicleId: null, TenantId: tenantId }] }, select: { VehicleId: true, SourceLabel: true, InvoiceNumber: true, WorkOrderNumber: true, DateTime: true, AmountReceive: true, Description: true } }),
+    label: (r) => `${str(r.Description) || '-'} ${kdec(r.AmountReceive)} บาท บิล ${str(r.InvoiceNumber) || '-'}${r.SourceLabel ? ` [${r.SourceLabel}]` : ''}`,
+    amount: (r) => Number(r.AmountReceive),
+  },
+    // Unmatched ทะเบียน: keep job-label rows (รื้อถอน/ทำถนน/งานขนขยะ) as unlinked
+    // income. Drop blank-plate rows and subtotal/grand-total rows ("รวม", "ทั้งหมด").
+    (row) => {
+      const label = str(cell(row, colMap, 'license'))
+      if (!label || /รวม|ทั้งหมด|total/i.test(label)) return null
+      return mk(row, null, label)
+    },
+  )
 }
 
 const CATEGORY_IMPORTERS: Record<string, (t: string, u: string | undefined, sheet: string, r: any[][], c: Record<string, number>) => Promise<CatResult>> = {
@@ -695,7 +771,7 @@ function headerFingerprint(matrix: any[][]): string {
 
 type Mapping = { type: SheetType; headerRow: number; colMap: Record<string, number>; via: string }
 
-export async function importWorkbook(tenantId: string, username: string | undefined, buffer: Buffer): Promise<SheetResult[]> {
+export async function importWorkbook(tenantId: string, username: string | undefined, buffer: Buffer, fileName?: string): Promise<SheetResult[]> {
   const sheets = bufferToSheets(buffer)
 
   // Resolve mappings (AI calls) with bounded concurrency — no DB writes here.
@@ -732,5 +808,50 @@ export async function importWorkbook(tenantId: string, username: string | undefi
     else r = await CATEGORY_IMPORTERS[m.type](tenantId, username, name, dataRows, m.colMap)
     results.push({ sheet: name, type: m.type, ...r })
   }
+
+  // Persist one reconcile log per import (income sheets only). Lets the history
+  // page show file vs DB totals and how much was cut as dup/already-present.
+  const incomeStats = results.filter((r) => r.stats)
+  if (incomeStats.length) {
+    const agg = incomeStats.reduce((s, r) => {
+      const t = r.stats as ImportStats
+      s.fileRows += t.fileRows; s.fileSum += t.fileSum
+      s.createdRows += r.created; s.createdSum += t.createdSum
+      s.dupRows += t.dupRows; s.dupSum += t.dupSum
+      s.existRows += t.existRows; s.existSum += t.existSum
+      return s
+    }, { fileRows: 0, fileSum: 0, createdRows: 0, createdSum: 0, dupRows: 0, dupSum: 0, existRows: 0, existSum: 0 })
+    await db.importLog.create({
+      data: {
+        TenantId: tenantId, CreatedByUsername: username ?? 'import', FileName: fileName ?? null,
+        FileRows: agg.fileRows, FileSum: agg.fileSum,
+        CreatedRows: agg.createdRows, CreatedSum: agg.createdSum,
+        DupRows: agg.dupRows, DupSum: agg.dupSum,
+        ExistRows: agg.existRows, ExistSum: agg.existSum,
+      },
+    })
+  }
   return results
+}
+
+export interface ImportBatch {
+  time: string; user: string; fileName: string | null
+  fileRows: number; fileSum: number
+  createdRows: number; createdSum: number
+  dupRows: number; dupSum: number
+  existRows: number; existSum: number
+}
+
+// Past income imports, read from the ImportLog written on each upload. Each row
+// is one import with full reconcile numbers (file vs DB, dup/already-present cuts).
+// Newest first. Imports done before this log existed are not listed.
+export async function getImportHistory(tenantId: string): Promise<ImportBatch[]> {
+  const logs = await db.importLog.findMany({ where: { TenantId: tenantId }, orderBy: { CreatedAt: 'desc' } })
+  return logs.map((l) => ({
+    time: l.CreatedAt.toISOString(), user: l.CreatedByUsername || '-', fileName: l.FileName,
+    fileRows: l.FileRows, fileSum: Number(l.FileSum),
+    createdRows: l.CreatedRows, createdSum: Number(l.CreatedSum),
+    dupRows: l.DupRows, dupSum: Number(l.DupSum),
+    existRows: l.ExistRows, existSum: Number(l.ExistSum),
+  }))
 }

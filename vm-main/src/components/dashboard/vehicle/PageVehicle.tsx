@@ -162,7 +162,6 @@ export default function PageVehicle(): React.JSX.Element {
     setInfoBillVehicleOpen(data);
   };
   const handleEditBillVehicleOpen = (data: VehicleModel) => {
-    console.log(data);
     handleClose();
     setInfoBillVehicle(data);
     setActionEdit(true)

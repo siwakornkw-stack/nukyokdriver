@@ -21,11 +21,11 @@ export function TotalProfit({ value, sx, loading = false, helpText }: TotalProfi
     <Card sx={sx}>
       <CardContent>
         <Stack direction="row" sx={{ alignItems: 'flex-start', justifyContent: 'space-between' }} spacing={3}>
-          <Stack spacing={1}>
+          <Stack spacing={1} sx={{ minWidth: 0 }}>
             <MetricLabel label="รวมกำไร" helpText={helpText} />
-            {loading ? <Skeleton width={120} height={40} /> : <Typography variant="h4">{value}</Typography>}
+            {loading ? <Skeleton width={120} height={40} /> : <Typography sx={{ fontWeight: 700, lineHeight: 1.2, whiteSpace: 'nowrap', fontSize: 'clamp(1.1rem, 1.7vw, 1.6rem)' }}>{value}</Typography>}
           </Stack>
-          <Avatar sx={{ backgroundColor: 'var(--mui-palette-success-main)', height: '56px', width: '56px' }}>
+          <Avatar sx={{ backgroundColor: 'var(--mui-palette-success-main)', height: '56px', width: '56px', flexShrink: 0 }}>
             <ReceiptIcon fontSize="var(--icon-fontSize-lg)" />
           </Avatar>
         </Stack>

@@ -16,7 +16,6 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import { ArrowRight as ArrowRightIcon } from '@phosphor-icons/react/dist/ssr/ArrowRight';
 import dayjs from 'dayjs';
-import { useRouter } from 'next/navigation';
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { getSummary } from '../../../../services/dashboard.service';
@@ -39,7 +38,7 @@ export interface SummaryProps {
 }
 
 export function Summary({ sx }: SummaryProps): React.JSX.Element {
-  const router = useRouter();
+  const [showAll, setShowAll] = React.useState(false);
   const today = dayjs().toDate();
   const dayAgo = dayjs().subtract(1, 'day').toDate();
   const [dateRange, setDateRange] = React.useState<[Date | null, Date | null]>([dayAgo, today]);
@@ -63,6 +62,9 @@ export function Summary({ sx }: SummaryProps): React.JSX.Element {
     staleTime: 10000,
     retry: 3
   });
+
+  const allRows = summaryData?.data?.data.vehicleSummary ?? [];
+  const visibleRows = showAll ? allRows : allRows.slice(0, 6);
 
   return (
     <Card sx={sx}>
@@ -92,18 +94,20 @@ export function Summary({ sx }: SummaryProps): React.JSX.Element {
             </TableRow>
           </TableHead>
           <TableBody>
-            {(summaryData?.data?.data.vehicleSummary.length ?? 0) === 0 ? (
+            {allRows.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={4} align="center" sx={{ color: 'text.secondary', py: 4 }}>
                   ไม่มีข้อมูลในช่วงวันที่ที่เลือก
                 </TableCell>
               </TableRow>
             ) : null}
-            {summaryData?.data?.data.vehicleSummary.slice(0, 6).map((order) => {
+            {visibleRows.map((order, i) => {
               return (
-                <TableRow hover key={order.no}>
-                  <TableCell>Vehicle-{order.no.toString().padStart(5, '0')}</TableCell>
-                  <TableCell>{order.license}</TableCell>
+                <TableRow hover key={`${order.no}-${order.license}-${i}`}>
+                  <TableCell>{order.unlinked ? '-' : `Vehicle-${order.no.toString().padStart(5, '0')}`}</TableCell>
+                  <TableCell sx={order.unlinked ? { color: 'error.main' } : undefined}>
+                    {order.unlinked ? `${order.license} (ไม่ผูกรถ)` : order.license}
+                  </TableCell>
                   <TableCell>{numberFormat(order.income)}</TableCell>
                   <TableCell>{numberFormat(order.outgoings)}</TableCell>
                 </TableRow>
@@ -126,18 +130,22 @@ export function Summary({ sx }: SummaryProps): React.JSX.Element {
           </TableFooter>
         </Table>
       </Box>
-      <Divider />
-      <CardActions sx={{ justifyContent: 'flex-end' }}>
-        <Button
-          color="inherit"
-          endIcon={<ArrowRightIcon fontSize="var(--icon-fontSize-md)" />}
-          size="small"
-          variant="text"
-          onClick={() => router.push('/dashboard/vehicle')}
-        >
-          ดูทั้งหมด
-        </Button>
-      </CardActions>
+      {allRows.length > 6 ? (
+        <>
+          <Divider />
+          <CardActions sx={{ justifyContent: 'flex-end' }}>
+            <Button
+              color="inherit"
+              endIcon={<ArrowRightIcon fontSize="var(--icon-fontSize-md)" />}
+              size="small"
+              variant="text"
+              onClick={() => setShowAll((v) => !v)}
+            >
+              {showAll ? 'ย่อ' : `ดูทั้งหมด (${allRows.length})`}
+            </Button>
+          </CardActions>
+        </>
+      ) : null}
     </Card>
   );
 }

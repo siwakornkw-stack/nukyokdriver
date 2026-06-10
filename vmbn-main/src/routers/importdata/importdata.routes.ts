@@ -9,6 +9,7 @@ const router = Router()
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } })
 
 router.get('/ai-status', requireUser, ImportController.checkAi)
+router.get('/history', requireUser, ImportController.history)
 
 router.post('/auto', requireUser, (req, res, next) => {
   upload.single('file')(req, res, (err) => {

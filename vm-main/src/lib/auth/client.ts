@@ -54,7 +54,6 @@ class AuthClient {
     const { username, password } = params;
 
     const result = await login({ username, password });
-    console.log('result', result);
     if (!result.ok) {
       return { error: result.message};
     }

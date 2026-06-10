@@ -11,6 +11,7 @@ export interface ImportSheetResult {
   sub: number;
   skipped: number;
   errors: string[];
+  duplicates?: string[];
 }
 
 export interface ImportResponse {
@@ -18,6 +19,21 @@ export interface ImportResponse {
   message?: string;
   fileName?: string;
   results?: ImportSheetResult[];
+  duplicates?: string[];
+}
+
+export interface ImportBatch {
+  time: string;
+  user: string;
+  fileName: string | null;
+  fileRows: number;
+  fileSum: number;
+  createdRows: number;
+  createdSum: number;
+  dupRows: number;
+  dupSum: number;
+  existRows: number;
+  existSum: number;
 }
 
 export type AiStatus = 'ok' | 'quota' | 'unavailable' | 'no_key' | 'error';
@@ -43,6 +59,17 @@ export async function checkAiStatus(): Promise<AiStatusResponse> {
     },
   });
   return res.json();
+}
+
+export async function getImportHistory(): Promise<ImportBatch[]> {
+  const res = await fetch(`${urlApi}/import/history`, {
+    headers: {
+      'x-domain': getDomain(),
+      Authorization: `Bearer ${Cookies.get('access_token') ?? ''}`,
+    },
+  });
+  const json = await res.json();
+  return json.items ?? [];
 }
 
 export async function importAuto(file: File): Promise<ImportResponse> {

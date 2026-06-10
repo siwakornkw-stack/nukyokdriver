@@ -53,7 +53,7 @@ export async function getDashboardController(req: IGetUserAuthInfoRequest, res: 
     const currentMonthData = await getWeeklyIncomeForMonth(tenantId, currentYear, currentMonth);
     const lastMonthData = await getWeeklyIncomeForMonth(tenantId, lastMonthYear, lastMonth);
     const currentWeekData = await getDailyIncomeForWeek(tenantId, currentYear, currentWeek);
-    const lastWeekData = await getDailyIncomeForWeek(tenantId, lastYear, lastWeek);
+    const lastWeekData = await getDailyIncomeForWeek(tenantId, currentYear, lastWeek);
 
     const outgoingsGasoline = gasolineCost.reduce((acc, curr) => acc + curr.Amount.toNumber(), 0)
     const outgoingsGasolineYear = gasolineCostYear.reduce((acc, curr) => acc + curr.Amount.toNumber(), 0)
@@ -85,10 +85,17 @@ export async function getDashboardController(req: IGetUserAuthInfoRequest, res: 
     const outgoingsLastWeek = outgoingsLastWeekGasoline + outgoingsLastWeekRepair
     const outgoingsLastDay = outgoingsLastDayGasoline + outgoingsLastDayRepair
 
-    const outgoingsDiff = outgoings === 0 ? 0 : ((outgoings - outgoingsLastMonth) / outgoings) * 100
-    const outgoingsYearDiff = outgoingsYear === 0 ? 0 : ((outgoingsYear - outgoingsLastYear) / outgoingsYear) * 100
-    const outgoingsWeekDiff = outgoingsWeek === 0 ? 0 : ((outgoingsWeek - outgoingsLastWeek) / outgoingsWeek) * 100
-    const outgoingsDayDiff = outgoingsDay === 0 ? 0 : ((outgoingsDay - outgoingsLastDay) / outgoingsDay) * 100
+    // Percent change magnitude vs previous period: |current - base| / base.
+    // Divide by the base (previous), not the current value. Direction is conveyed
+    // by the separate *Trend field, so return the absolute magnitude here.
+    // base === 0 -> 100% if grew from nothing, 0% if both zero.
+    const pctChange = (cur: number, prev: number): number =>
+      prev === 0 ? (cur === 0 ? 0 : 100) : Math.abs((cur - prev) / prev) * 100
+
+    const outgoingsDiff = pctChange(outgoings, outgoingsLastMonth)
+    const outgoingsYearDiff = pctChange(outgoingsYear, outgoingsLastYear)
+    const outgoingsWeekDiff = pctChange(outgoingsWeek, outgoingsLastWeek)
+    const outgoingsDayDiff = pctChange(outgoingsDay, outgoingsLastDay)
 
     const incomeTotal = income.reduce((acc, curr) => acc + curr.AmountReceive.toNumber(), 0)
     const incomeWeekTotal = incomeWeek.reduce((acc, curr) => acc + curr.AmountReceive.toNumber(), 0)
@@ -100,10 +107,10 @@ export async function getDashboardController(req: IGetUserAuthInfoRequest, res: 
     const incomeLastWeekTotal = incomeLastWeek.reduce((acc, curr) => acc + curr.AmountReceive.toNumber(), 0)
     const incomeLastDayTotal = incomeLastDay.reduce((acc, curr) => acc + curr.AmountReceive.toNumber(), 0)
 
-    const incomeDiff = incomeTotal === 0 ? 0 : ((incomeTotal - incomeLastMonthTotal) / incomeTotal) * 100
-    const incomeWeekDiff = incomeWeekTotal === 0 ? 0 : ((incomeWeekTotal - incomeLastWeekTotal) / incomeWeekTotal) * 100
-    const incomeDayDiff = incomeDayTotal === 0 ? 0 : ((incomeDayTotal - incomeLastDayTotal) / incomeDayTotal) * 100
-    const incomeYearDiff = incomeYearTotal === 0 ? 0 : ((incomeYearTotal - incomeLastYearTotal) / incomeYearTotal) * 100
+    const incomeDiff = pctChange(incomeTotal, incomeLastMonthTotal)
+    const incomeWeekDiff = pctChange(incomeWeekTotal, incomeLastWeekTotal)
+    const incomeDayDiff = pctChange(incomeDayTotal, incomeLastDayTotal)
+    const incomeYearDiff = pctChange(incomeYearTotal, incomeLastYearTotal)
 
     const incomePercentage = outgoings === 0 ? 100 : (incomeTotal / outgoings) * 100
     const incomeWeekPercentage = outgoingsWeek === 0 ? 100 : (incomeWeekTotal / outgoingsWeek) * 100
@@ -229,15 +236,31 @@ export async function getSummaryFromDateRange(req: IGetUserAuthInfoRequest, res:
       return cur
     }
 
-    income.forEach(item => { entry(item).income += item.AmountReceive.toNumber() })
+    // Per-vehicle breakdown for linked income; unlinked income (VehicleId null) is
+    // grouped separately below so the rows still sum to totalIncome.
+    income.forEach(item => { if (item.VehicleId && item.Vehicle) entry({ VehicleId: item.VehicleId, Vehicle: item.Vehicle }).income += item.AmountReceive.toNumber() })
     gasolineCost.forEach(item => { entry(item).outgoings += item.Amount.toNumber() })
     repairCost.forEach(item => { entry(item).outgoings += item.CompanyPay.toNumber() })
+
+    // Unlinked income: income rows whose ทะเบียน matched no vehicle in the fleet
+    // (often an import that couldn't link). Group by SourceLabel so they show as
+    // their own rows — this is where "the file is wrong" surfaces.
+    const unlinked = new Map<string, number>()
+    income.forEach(item => {
+      if (!item.VehicleId) {
+        const key = item.SourceLabel || '(ไม่มีทะเบียน)'
+        unlinked.set(key, (unlinked.get(key) || 0) + item.AmountReceive.toNumber())
+      }
+    })
+    const unlinkedRows = Array.from(unlinked.entries()).map(([label, inc]) => ({
+      no: '', license: label, income: inc, outgoings: 0, unlinked: true,
+    }))
 
     const response = {
       income: totalIncome,
       outgoings: outgoings,
       profit: profit,
-      vehicleSummary: Array.from(vehicleSummary.values())
+      vehicleSummary: [...Array.from(vehicleSummary.values()), ...unlinkedRows]
     }
 
     res.json({

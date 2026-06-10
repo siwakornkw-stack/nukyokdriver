@@ -37,6 +37,7 @@ export default function PageImport(): React.JSX.Element {
   const [loading, setLoading] = React.useState(false);
   const [message, setMessage] = React.useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [results, setResults] = React.useState<ImportSheetResult[]>([]);
+  const [duplicates, setDuplicates] = React.useState<string[]>([]);
   const [aiChecking, setAiChecking] = React.useState(false);
   const [aiStatus, setAiStatus] = React.useState<AiStatusResponse | null>(null);
 
@@ -59,9 +60,11 @@ export default function PageImport(): React.JSX.Element {
     }
     setLoading(true);
     setResults([]);
+    setDuplicates([]);
     try {
       const res = await importAuto(file);
       setResults(res.results ?? []);
+      setDuplicates(res.duplicates ?? []);
       setMessage({ type: res.success ? 'success' : 'error', text: res.message ?? 'เสร็จสิ้น' });
     } catch (e) {
       setMessage({ type: 'error', text: 'อัปโหลดไม่สำเร็จ' });
@@ -187,6 +190,23 @@ export default function PageImport(): React.JSX.Element {
               </TableBody>
             </Table>
           </Box>
+        </Card>
+      ) : null}
+
+      {duplicates.length > 0 ? (
+        <Card>
+          <CardHeader
+            title={`จุดที่ซ้ำในไฟล์ (ตัดออก ${duplicates.length} รายการ)`}
+            subheader="แถวที่มี key ซ้ำกันในไฟล์ ระบบเก็บไว้ชุดเดียว ที่เหลือตัดทิ้ง"
+          />
+          <Divider />
+          <CardContent>
+            <Stack spacing={0.5}>
+              {duplicates.map((d, i) => (
+                <Typography key={i} variant="body2" color="text.secondary">{d}</Typography>
+              ))}
+            </Stack>
+          </CardContent>
         </Card>
       ) : null}
     </Stack>
