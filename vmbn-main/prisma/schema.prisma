@@ -481,6 +481,7 @@ model RepairVehicle {
   RepairDate DateTime
   LicensePlate String
   RepairShop String
+  Description String?
   ReceiveDate DateTime
   InsurancePay Decimal @db.Decimal(10,2)
   CompanyPay Decimal @db.Decimal(10,2)

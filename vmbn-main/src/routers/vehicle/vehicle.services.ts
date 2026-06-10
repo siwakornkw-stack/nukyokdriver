@@ -588,6 +588,7 @@ export function getRepairVehicleByIdVehicleService(VehicleId: string, TenantId: 
     repairDate: t.RepairDate,
     licensePlate: t.LicensePlate,
     repairShop: t.RepairShop,
+    description: t.Description,
     receiveDate: t.ReceiveDate,
     insurancePay: t.InsurancePay,
     companyPay: t.CompanyPay,

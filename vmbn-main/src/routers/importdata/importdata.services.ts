@@ -103,10 +103,11 @@ const SYNONYMS: Record<string, string[]> = {
   scheduledAt: ['วันเวลา', 'เวลา', 'วันที่', 'scheduledat'],
   // per-vehicle sub-data columns
   repairDate: ['วันที่ซ่อม', 'วันซ่อม'],
-  repairShop: ['อู่', 'ร้านซ่อม', 'อู่ซ่อม', 'ชื่ออู่'],
+  repairShop: ['อู่', 'ร้านซ่อม', 'อู่ซ่อม', 'ชื่ออู่', 'ผู้ซ่อม', 'ช่างซ่อม'],
   receiveDate: ['วันรับรถ', 'วันที่รับรถ', 'รับรถ'],
   insurancePay: ['ประกันจ่าย', 'ประกันออก'],
-  companyPay: ['บริษัทจ่าย', 'บริษัทออก'],
+  // ตาราง MA repair sheets put the line cost under a bare ราคา header.
+  companyPay: ['บริษัทจ่าย', 'บริษัทออก', 'ราคา'],
   accidentDate: ['วันที่เกิดเหตุ', 'วันเกิดเหตุ'],
   accidentTime: ['เวลาเกิดเหตุ'],
   party: ['คู่กรณี', 'จำนวนคู่กรณี'],
@@ -129,6 +130,9 @@ const SYNONYMS: Record<string, string[]> = {
   // premium ('เบี้ยรวม') are defined earlier in this map, so they still win on fuel /
   // vehicle sheets — only a bare "รวม" header falls through to amountReceive here.
   amountReceive: ['จำนวนรับ', 'ยอดรับ', 'เงินที่ได้รับ', 'รวม'],
+  // Bare จำนวน (quantity) — must stay LAST so จำนวนเงิน/จำนวนลิตร/จำนวนรับ/
+  // จำนวนคู่กรณี keep matching their earlier, more specific fields.
+  qty: ['จำนวน'],
 }
 
 // Map a header cell to a canonical field name (or null).
@@ -498,6 +502,19 @@ async function resolveSheetVehicle(tenantId: string, username: string | undefine
     if (p.suffix) { prefix = p.prefix; suffix = p.suffix; province = p.province; id = vmap.exact.get(plateKey(prefix, suffix, '')) ?? null }
   }
   if (id) return id
+  // Sheet names often wrap the plate in noise: "ดั้มพ์ บม-7933", "82-8380 (คันฟ้า)".
+  // Retry the paren-stripped name and its last digit-bearing token (>=3 digits, so
+  // "บด 10 T" can't false-match a plate). Lookup only — the create below keeps the
+  // original parse, so vehicles minted by earlier imports keep matching.
+  const cleaned = name.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim()
+  const tok = cleaned.split(' ').filter((t) => /\d{3,}/.test(t)).pop() ?? ''
+  for (const cand of [cleaned, tok]) {
+    if (!cand || cand === name) continue
+    const p = parseLicense(cand)
+    if (!p.suffix) continue
+    const hit = vmap.exact.get(plateKey(p.prefix, p.suffix, ''))
+    if (hit) return hit
+  }
   const model = prefix || suffix ? '' : name
   const created = await db.vehicle.create({
     data: {
@@ -546,7 +563,14 @@ async function importCategory<T extends { VehicleId?: string | null }>(
     try {
       let vid = rowVehicleId(rows[i], colMap, vmap)
       if (!vid && !rowsCarryVehicle) {
-        if (sheetVid === undefined) sheetVid = await resolveSheetVehicle(tenantId, username, sheetName, vmap)
+        if (sheetVid === undefined) {
+          // Probe the row before resolving (and possibly CREATING) the sheet
+          // vehicle, so template sheets ("ต้นฉบับ") whose rows all build to null
+          // don't mint a junk vehicle named after the sheet. Builders are
+          // idempotent per row, so the real build below can run again safely.
+          if (!build(rows[i], '__probe__')) { skipped++; continue }
+          sheetVid = await resolveSheetVehicle(tenantId, username, sheetName, vmap)
+        }
         vid = sheetVid
       }
       if (!vid) {
@@ -591,14 +615,66 @@ async function importCategory<T extends { VehicleId?: string | null }>(
   return { created: fresh.length, updated: 0, sub: 0, skipped, errors, duplicates, stats }
 }
 
+// Strict DD/MM/YYYY (CE or BE year). dateOrNull can't take these: new Date("29/09/2023")
+// reads 29 as a month and yields Invalid Date. Local to repair so the income/fuel
+// date semantics (and their re-upload dedup keys) stay byte-identical.
+const dmyOrNull = (v: any): Date | null => {
+  const m = str(v).match(/^(\d{1,2})[/.](\d{1,2})[/.](\d{2}|\d{4})$/)
+  if (!m) return null
+  const [, dd, mm, yy] = m.map(Number)
+  if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null
+  // 2-digit years parse as 19yy here; the caller's 1950-1999 window fix then
+  // resolves them as short BE years ("20/6/68" -> 1968 -> 2025).
+  return adjustBE(new Date(Date.UTC(yy < 100 ? 1900 + yy : yy, mm - 1, dd)))
+}
+
 function importRepair(tenantId: string, username: string | undefined, sheetName: string, rows: any[][], colMap: Record<string, number>): Promise<CatResult> {
+  // ตาราง MA workbooks: one vehicle per sheet, columns ลำดับ|วันที่|รายละเอียด|
+  // ผู้ซ่อม|จำนวน|ราคา. Line items of one visit leave วันที่ blank on continuation
+  // rows, so the last seen date carries forward. ราคา is the line total ->
+  // CompanyPay (the dashboard sums outgoings from CompanyPay). The MA-specific
+  // rules only engage when the sheet has a รายละเอียด column (hasDesc), so the
+  // old repair layout (วันที่ซ่อม/อู่ per row) imports exactly as before.
+  const hasDesc = 'incomeDescription' in colMap
+  let lastDate: Date | null = null
   return importCategory<Prisma.RepairVehicleCreateManyInput>(tenantId, username, sheetName, rows, colMap, (row, vid) => {
-    const d = dateOrNull(cell(row, colMap, 'repairDate')) ?? dateOrNull(cell(row, colMap, 'receiveDate'))
+    const desc = str(cell(row, colMap, 'incomeDescription'))
+    if (hasDesc) {
+      // Blank/template rows carry no item; per-shop subtotal rows ("ยอดรวมร้าน...")
+      // would double-count the costs above them.
+      if (!desc) return null
+      if (/ยอดรวม/.test(`${str(cell(row, colMap, 'scheduledAt'))} ${desc}`)) return null
+    }
+    let d = dateOrNull(cell(row, colMap, 'repairDate')) ?? dateOrNull(cell(row, colMap, 'receiveDate'))
+    if (!d && 'scheduledAt' in colMap) {
+      const raw = cell(row, colMap, 'scheduledAt')
+      d = dateOrNull(raw) ?? dmyOrNull(raw)
+    }
+    // Hand-typed "6/5/68" means BE 2568, but Excel windows 2-digit years to 19xx,
+    // so both serials (24964) and strings land in 1950-1999. Real CE year =
+    // 19yy + 600 - 543 = 19yy + 57 (1968 -> 2025).
+    if (d) { const y = d.getFullYear(); if (y >= 1950 && y <= 1999) { d = new Date(d.getTime()); d.setFullYear(y + 57) } }
+    // Remaining out-of-range years are typos; treat as unparsed so the visit date
+    // carries forward instead of importing garbage.
+    if (d && (d.getFullYear() < 1990 || d.getFullYear() > 2100)) d = null
+    if (!d && hasDesc) d = lastDate
     if (!d) return null
-    return { VehicleId: vid, Status: 'active', RepairDate: d, LicensePlate: str(cell(row, colMap, 'license')), RepairShop: str(cell(row, colMap, 'repairShop')), ReceiveDate: dateOrNull(cell(row, colMap, 'receiveDate')) ?? d, InsurancePay: decOrZero(cell(row, colMap, 'insurancePay')), CompanyPay: decOrZero(cell(row, colMap, 'companyPay')), CreatedByUsername: username ?? 'import' }
+    lastDate = d
+    const qty = str(cell(row, colMap, 'qty'))
+    return { VehicleId: vid, Status: 'active', RepairDate: d,
+      Description: hasDesc ? (qty && qty !== '1' ? `${desc} (จำนวน ${qty})` : desc) : null,
+      LicensePlate: str(cell(row, colMap, 'license')), RepairShop: str(cell(row, colMap, 'repairShop')),
+      ReceiveDate: dateOrNull(cell(row, colMap, 'receiveDate')) ?? d,
+      InsurancePay: decOrZero(cell(row, colMap, 'insurancePay')),
+      // Annotation text in the price cell ("52884 (รอบถัดไป)", "ยังไม่วางบิล",
+      // "ฟรี") is never a price — decOrZero would strip the Thai and read the
+      // leftover digits as baht.
+      CompanyPay: /[ก-๙]/.test(str(cell(row, colMap, 'companyPay'))) ? ZERO : decOrZero(cell(row, colMap, 'companyPay')),
+      CreatedByUsername: username ?? 'import' }
   }, (data) => db.repairVehicle.createMany({ data }), {
-    keyOf: (r) => `${r.VehicleId}|${kdate(r.RepairDate)}|${str(r.RepairShop)}|${kdec(r.InsurancePay)}|${kdec(r.CompanyPay)}`,
-    load: (vids) => db.repairVehicle.findMany({ where: { VehicleId: { in: vids } }, select: { VehicleId: true, RepairDate: true, RepairShop: true, InsurancePay: true, CompanyPay: true } }),
+    keyOf: (r) => `${r.VehicleId}|${kdate(r.RepairDate)}|${str(r.RepairShop)}|${str(r.Description ?? '')}|${kdec(r.InsurancePay)}|${kdec(r.CompanyPay)}`,
+    load: (vids) => db.repairVehicle.findMany({ where: { VehicleId: { in: vids } }, select: { VehicleId: true, RepairDate: true, RepairShop: true, Description: true, InsurancePay: true, CompanyPay: true } }),
+    label: (r) => `${str(r.Description) || str(r.RepairShop) || '-'} ${kdec(r.CompanyPay)} บาท`,
   })
 }
 function importAccident(tenantId: string, username: string | undefined, sheetName: string, rows: any[][], colMap: Record<string, number>): Promise<CatResult> {
@@ -719,8 +795,15 @@ async function resolveMapping(sheetName: string, matrix: any[][]): Promise<{ typ
     // Also prefer the heuristic's structurally-detected headerRow — the AI's is often
     // off by one, which slices away the first data row of every sheet sharing that layout.
     const det = detectHeader(matrix)
+    // Repair headers (ผู้ซ่อม/อู่/วันที่ซ่อม) are curated and unambiguous, but the
+    // AI sometimes reads a repair sheet's รายละเอียด column as income — which would
+    // import repair costs as revenue. Trust the heuristic's 'repair' over the AI,
+    // except for 'accident' (อู่ also appears on accident sheets, where the AI is
+    // the one that can tell them apart).
+    const hType = det ? classify(det.colMap) : 'unknown'
+    const type = hType === 'repair' && ai.type !== 'accident' ? 'repair' : ai.type
     return {
-      type: ai.type,
+      type,
       headerRow: det ? det.headerRow : ai.headerRow,
       colMap: { ...ai.columns, ...(det?.colMap ?? {}) },
       via: 'ai',
