@@ -214,12 +214,16 @@ export interface ExpenseSummaryRow {
 }
 
 // แต่ละตารางต้นทุนใช้ field วันที่ต่างกัน จึงสร้าง where แยกต่อ relation
+// anchor ขอบเขตวันทั้งสองด้านที่ start/end-of-day ฐานเดียวกัน (setHours) ไม่ปนกับ UTC midnight
+// ของ new Date('YYYY-MM-DD') เพื่อให้ตรงกับ dashboard getCostBreakdown ในทุก timezone
 function dateRange(field: string, startDate?: string, endDate?: string): any {
   const where: any = { Status: 'active' }
   if (startDate && endDate) {
+    const start = new Date(startDate)
+    start.setHours(0, 0, 0, 0)
     const end = new Date(endDate)
     end.setHours(23, 59, 59, 999)
-    where[field] = { gte: new Date(startDate), lte: end }
+    where[field] = { gte: start, lte: end }
   }
   return where
 }

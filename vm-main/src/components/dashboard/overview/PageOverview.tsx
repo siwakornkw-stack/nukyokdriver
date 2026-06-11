@@ -12,6 +12,8 @@ import { TasksProgress } from '@/components/dashboard/overview/tasks-progress';
 // import { TotalCustomers } from '@/components/dashboard/overview/total-customers';
 import { TotalProfit } from '@/components/dashboard/overview/total-profit';
 import { Traffic } from '@/components/dashboard/overview/traffic';
+import { CostBreakdownCard } from '@/components/dashboard/overview/cost-breakdown';
+import { FleetSummaryCard } from '@/components/dashboard/overview/fleet-summary';
 import { Income } from '@/components/dashboard/overview/income';
 import { getDashboard } from '../../../../services/dashboard.service';
 import type { DashboardResponse } from '@/types/dashboard';
@@ -173,7 +175,8 @@ export default function PageOverview(): React.JSX.Element {
           incomeTrend: DashboardData.data.incomeWeekTrend,
           incomePercentage: DashboardData.data.incomeWeekPercentage,
           graphData: DashboardData.data.graphDataWeek,
-          profit: DashboardData.data.profitWeek
+          profit: DashboardData.data.profitWeek,
+          costBreakdown: DashboardData.data.costBreakdownWeek
         };
       case 'month':
         return {
@@ -185,7 +188,8 @@ export default function PageOverview(): React.JSX.Element {
           incomeTrend: DashboardData.data.incomeTrend,
           incomePercentage: DashboardData.data.incomePercentage,
           graphData: DashboardData.data.graphDataMonth,
-          profit: DashboardData.data.profit
+          profit: DashboardData.data.profit,
+          costBreakdown: DashboardData.data.costBreakdown
         };
       default:
         return {
@@ -197,12 +201,14 @@ export default function PageOverview(): React.JSX.Element {
           incomeTrend: DashboardData.data.incomeYearTrend,
           incomePercentage: DashboardData.data.incomeYearPercentage,
           graphData: DashboardData.data.graphData,
-          profit: DashboardData.data.profitYear
+          profit: DashboardData.data.profitYear,
+          costBreakdown: DashboardData.data.costBreakdownYear
         };
     }
   };
 
   const timeRangeData = getTimeRangeData();
+  const fleetSummary = DashboardData?.data?.fleetSummary;
   const compareLabel = timeRange === 'month' ? 'จากเดือนที่แล้ว' : timeRange === 'week' ? 'จากสัปดาห์ที่แล้ว' : 'จากปีที่แล้ว';
 
   useEffect(() => {
@@ -294,7 +300,14 @@ export default function PageOverview(): React.JSX.Element {
         <Grid lg={4} md={12} xs={12}>
           <Traffic chartSeries={[timeRangeData?.outgoings ?? 0, timeRangeData?.income ?? 0]} labels={['ค่าใช้จ่าย', 'รายได้']} sx={{ height: '100%' }} />
         </Grid>
-        
+
+        <Grid lg={8} md={12} xs={12}>
+          <CostBreakdownCard breakdown={timeRangeData?.costBreakdown} loading={isDashboardLoading} sx={{ height: '100%' }} />
+        </Grid>
+        <Grid lg={4} md={12} xs={12}>
+          <FleetSummaryCard fleet={fleetSummary} loading={isDashboardLoading} sx={{ height: '100%' }} />
+        </Grid>
+
         <Grid lg={12} md={12} xs={12}>
           <Summary
             sx={{ height: '100%' }}

@@ -408,9 +408,79 @@ export async function getGasolineCostFromDateRange(tenantId: string, start: Date
 }
 
 export async function getRepairVehicleFromDateRange(tenantId: string, start: Date, end: Date) {
-  return await db.repairVehicle.findMany({ where: { Status: 'active', Vehicle: { TenantId: tenantId }, ReceiveDate: { gte: start, lte: end } },
+  return await db.repairVehicle.findMany({ where: { Status: 'active', Vehicle: { TenantId: tenantId }, RepairDate: { gte: start, lte: end } },
     include: {
       Vehicle: true
     }
   })
+}
+
+// ต้นทุนเต็มทุกหมวดในช่วงเวลา [start, end] แต่ละหมวด filter ตาม field วันที่ของตัวเอง
+// (สอดคล้องกับ /summary/expense ในหน้า report)
+export interface CostBreakdown {
+  fuel: number
+  repair: number
+  tax: number
+  compulsory: number
+  insurance: number
+  installment: number
+  total: number
+}
+
+export async function getCostBreakdown(tenantId: string, start: Date, end: Date): Promise<CostBreakdown> {
+  // Scope = ทุกคันของ tenant (ไม่กรอง Vehicle.Status) โดยตั้งใจ: ต้นทุนที่เกิดจริงในช่วงเวลา
+  // รวมรถที่ถูก soft-delete ไปแล้วด้วย เพื่อให้ตรงกับหน้า report (getExpenseSummaryService).
+  // ต่างจาก getFleetSummary ที่นับเฉพาะ active = "กองรถปัจจุบัน" คนละความหมายโดยตั้งใจ.
+  const ofTenant = { Vehicle: { TenantId: tenantId } }
+  const [gas, repair, tax, comp, ins, inst] = await Promise.all([
+    db.gasolineCost.findMany({ where: { Status: 'active', ...ofTenant, DateTime: { gte: start, lte: end } } }),
+    db.repairVehicle.findMany({ where: { Status: 'active', ...ofTenant, RepairDate: { gte: start, lte: end } } }),
+    db.tax.findMany({ where: { Status: 'active', ...ofTenant, EndDate: { gte: start, lte: end } } }),
+    db.compulsoryMotorInsuranceVehicle.findMany({ where: { Status: 'active', ...ofTenant, EndDate: { gte: start, lte: end } } }),
+    db.insurancePolicyVehicle.findMany({ where: { Status: 'active', ...ofTenant, EndDate: { gte: start, lte: end } } }),
+    db.installmentsVehicle.findMany({ where: { Status: 'active', ...ofTenant, DueDate: { gte: start, lte: end } } }),
+  ])
+  const fuel = gas.reduce((s, x) => s + x.Amount.toNumber(), 0)
+  const repairTotal = repair.reduce((s, x) => s + x.CompanyPay.toNumber(), 0)
+  const taxTotal = tax.reduce((s, x) => s + x.TotalPremium.toNumber(), 0)
+  const compTotal = comp.reduce((s, x) => s + x.TotalPremium.toNumber(), 0)
+  const insTotal = ins.reduce((s, x) => s + x.TotalPremium.toNumber(), 0)
+  const instTotal = inst.reduce((s, x) => s + x.Amount.toNumber(), 0)
+  const total = fuel + repairTotal + taxTotal + compTotal + insTotal + instTotal
+  return { fuel, repair: repairTotal, tax: taxTotal, compulsory: compTotal, insurance: insTotal, installment: instTotal, total }
+}
+
+export interface FleetSummary {
+  total: number
+  byType: { name: string; count: number }[]
+  expiringTax: number
+  expiringCompulsory: number
+  expiringInsurance: number
+}
+
+// สรุปกองรถ + จำนวนที่ภาษี/พรบ./ประกัน ใกล้หมดอายุภายใน 30 วัน (นับจาก policy ล่าสุดของแต่ละคัน)
+export async function getFleetSummary(tenantId: string): Promise<FleetSummary> {
+  const now = new Date()
+  const in30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+  const vehicles = await db.vehicle.findMany({
+    where: { TenantId: tenantId, Status: 'active' },
+    include: {
+      VehicleType: true,
+      Tax: { where: { Status: 'active' }, orderBy: { EndDate: 'desc' }, take: 1 },
+      CompulsoryMotorInsuranceVehicle: { where: { Status: 'active' }, orderBy: { EndDate: 'desc' }, take: 1 },
+      InsurancePolicyVehicle: { where: { Status: 'active' }, orderBy: { EndDate: 'desc' }, take: 1 },
+    }
+  })
+  const within = (d?: Date | null): boolean => d != null && d >= now && d <= in30
+  const typeMap = new Map<string, number>()
+  let expiringTax = 0, expiringCompulsory = 0, expiringInsurance = 0
+  for (const v of vehicles) {
+    const t = v.VehicleType?.Name || 'ไม่ระบุ'
+    typeMap.set(t, (typeMap.get(t) || 0) + 1)
+    if (within(v.Tax[0]?.EndDate)) expiringTax++
+    if (within(v.CompulsoryMotorInsuranceVehicle[0]?.EndDate)) expiringCompulsory++
+    if (within(v.InsurancePolicyVehicle[0]?.EndDate)) expiringInsurance++
+  }
+  const byType = Array.from(typeMap.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count)
+  return { total: vehicles.length, byType, expiringTax, expiringCompulsory, expiringInsurance }
 }

@@ -37,6 +37,10 @@ export type DashboardData = {
   profitWeek: number;
   profitDay: number;
   profitYear: number;
+  costBreakdown: CostBreakdown;
+  costBreakdownWeek: CostBreakdown;
+  costBreakdownYear: CostBreakdown;
+  fleetSummary: FleetSummary;
   graphData: [
     { name: string; data: number[] }
   ]
@@ -46,6 +50,24 @@ export type DashboardData = {
   graphDataWeek: [
     { name: string; data: number[] }
   ]
+}
+
+export type CostBreakdown = {
+  fuel: number;
+  repair: number;
+  tax: number;
+  compulsory: number;
+  insurance: number;
+  installment: number;
+  total: number;
+}
+
+export type FleetSummary = {
+  total: number;
+  byType: { name: string; count: number }[];
+  expiringTax: number;
+  expiringCompulsory: number;
+  expiringInsurance: number;
 }
 
 export type SummaryResponse = {

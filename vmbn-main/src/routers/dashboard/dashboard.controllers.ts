@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express'
 import { IGetUserAuthInfoRequest } from "../../typings/express"
 import { ParsedToken } from '../../typings/token'
-import { getDailyIncomeForWeek, getGasolineCostFromDateRange, getGasolineCostLastYear, getGasolineCostThisDay, getGasolineCostThisMonth, getGasolineCostThisWeek, getGasolineCostThisYear, getIncomeVehicle, getIncomeVehicleFromDateRange, getIncomeVehicleLastDay, getIncomeVehicleLastMonth, getIncomeVehicleLastWeek, getIncomeVehicleLastYear, getIncomeVehicleThisDay, getIncomeVehicleThisMonth, getIncomeVehicleThisWeek, getIncomeVehicleThisYear, getMonthlyIncomeForYear, getRepairVehicleFromDateRange, getOutgoingsLastDay, getOutgoingsLastMonth, getOutgoingsLastWeek, getRepairVehicleLastDay, getRepairVehicleLastMonth, getRepairVehicleLastWeek, getRepairVehicleLastYear, getRepairVehicleThisDay, getRepairVehicleThisMonth, getRepairVehicleThisWeek, getRepairVehicleThisYear, getWeeklyIncomeForMonth } from './dashboard.services'
+import { getDailyIncomeForWeek, getGasolineCostFromDateRange, getIncomeVehicleFromDateRange, getIncomeVehicleLastDay, getIncomeVehicleLastMonth, getIncomeVehicleLastWeek, getIncomeVehicleLastYear, getIncomeVehicleThisDay, getIncomeVehicleThisMonth, getIncomeVehicleThisWeek, getIncomeVehicleThisYear, getMonthlyIncomeForYear, getRepairVehicleFromDateRange, getWeeklyIncomeForMonth, getCostBreakdown, getFleetSummary } from './dashboard.services'
 
 export async function getDashboardController(req: IGetUserAuthInfoRequest, res: Response, next: NextFunction) {
   try {
@@ -13,30 +13,10 @@ export async function getDashboardController(req: IGetUserAuthInfoRequest, res: 
     const incomeDay = await getIncomeVehicleThisDay(tenantId)
     const incomeYear = await getIncomeVehicleThisYear(tenantId)
 
-    const gasolineCostYear = await getGasolineCostThisYear(tenantId)
-    const gasolineCost = await getGasolineCostThisMonth(tenantId)
-    const gasolineCostWeek = await getGasolineCostThisWeek(tenantId)
-    const gasolineCostDay = await getGasolineCostThisDay(tenantId)
-
-    const repairVehicleYear = await getRepairVehicleThisYear(tenantId)
-    const repairVehicle = await getRepairVehicleThisMonth(tenantId)
-    const repairVehicleWeek = await getRepairVehicleThisWeek(tenantId)
-    const repairVehicleDay = await getRepairVehicleThisDay(tenantId)
-
     const incomeLastMonth = await getIncomeVehicleLastMonth(tenantId)
     const incomeLastWeek = await getIncomeVehicleLastWeek(tenantId)
     const incomeLastDay = await getIncomeVehicleLastDay(tenantId)
     const incomeLastYear = await getIncomeVehicleLastYear(tenantId)
-
-    const gasolineCostLastYear = await getGasolineCostLastYear(tenantId)
-    const gasolineCostLastMonth = await getOutgoingsLastMonth(tenantId)
-    const gasolineCostLastWeek = await getOutgoingsLastWeek(tenantId)
-    const gasolineCostLastDay = await getOutgoingsLastDay(tenantId)
-
-    const repairVehicleLastYear = await getRepairVehicleLastYear(tenantId)
-    const repairVehicleLastMonth = await getRepairVehicleLastMonth(tenantId)
-    const repairVehicleLastWeek = await getRepairVehicleLastWeek(tenantId)
-    const repairVehicleLastDay = await getRepairVehicleLastDay(tenantId)
 
     const currentYear = new Date().getFullYear();
     const lastYear = currentYear - 1;
@@ -55,35 +35,43 @@ export async function getDashboardController(req: IGetUserAuthInfoRequest, res: 
     const currentWeekData = await getDailyIncomeForWeek(tenantId, currentYear, currentWeek);
     const lastWeekData = await getDailyIncomeForWeek(tenantId, currentYear, lastWeek);
 
-    const outgoingsGasoline = gasolineCost.reduce((acc, curr) => acc + curr.Amount.toNumber(), 0)
-    const outgoingsGasolineYear = gasolineCostYear.reduce((acc, curr) => acc + curr.Amount.toNumber(), 0)
-    const outgoingsGasolineWeek = gasolineCostWeek.reduce((acc, curr) => acc + curr.Amount.toNumber(), 0)
-    const outgoingsGasolineDay = gasolineCostDay.reduce((acc, curr) => acc + curr.Amount.toNumber(), 0)
+    // ขอบเขตวันที่ของแต่ละช่วง (ใช้กับ getCostBreakdown ที่รวมต้นทุนทุกหมวด)
+    const now = new Date()
+    const eod = (d: Date): Date => { d.setHours(23, 59, 59, 999); return d }
+    const sow = (offsetWeeks: number): Date => { const d = new Date(now); d.setDate(now.getDate() - now.getDay() + offsetWeeks * 7); d.setHours(0, 0, 0, 0); return d }
+    const eow = (offsetWeeks: number): Date => eod(new Date(sow(offsetWeeks).getTime() + 6 * 86400000))
+    const bounds = {
+      year: [new Date(currentYear, 0, 1), eod(new Date(currentYear, 11, 31))] as const,
+      lastYear: [new Date(lastYear, 0, 1), eod(new Date(lastYear, 11, 31))] as const,
+      month: [new Date(now.getFullYear(), now.getMonth(), 1), eod(new Date(now.getFullYear(), now.getMonth() + 1, 0))] as const,
+      lastMonth: [new Date(now.getFullYear(), now.getMonth() - 1, 1), eod(new Date(now.getFullYear(), now.getMonth(), 0))] as const,
+      week: [sow(0), eow(0)] as const,
+      lastWeek: [sow(-1), eow(-1)] as const,
+      day: [(() => { const d = new Date(now); d.setHours(0, 0, 0, 0); return d })(), eod(new Date(now))] as const,
+      lastDay: [(() => { const d = new Date(now); d.setDate(now.getDate() - 1); d.setHours(0, 0, 0, 0); return d })(), eod((() => { const d = new Date(now); d.setDate(now.getDate() - 1); return d })())] as const,
+    }
 
-    const outgoingsRepair = repairVehicle.reduce((acc, curr) => acc + curr.CompanyPay.toNumber(), 0)
-    const outgoingsRepairYear = repairVehicleYear.reduce((acc, curr) => acc + curr.CompanyPay.toNumber(), 0)
-    const outgoingsRepairWeek = repairVehicleWeek.reduce((acc, curr) => acc + curr.CompanyPay.toNumber(), 0)
-    const outgoingsRepairDay = repairVehicleDay.reduce((acc, curr) => acc + curr.CompanyPay.toNumber(), 0)
+    const [cbYear, cbMonth, cbWeek, cbDay, cbLastYear, cbLastMonth, cbLastWeek, cbLastDay, fleetSummary] = await Promise.all([
+      getCostBreakdown(tenantId, bounds.year[0], bounds.year[1]),
+      getCostBreakdown(tenantId, bounds.month[0], bounds.month[1]),
+      getCostBreakdown(tenantId, bounds.week[0], bounds.week[1]),
+      getCostBreakdown(tenantId, bounds.day[0], bounds.day[1]),
+      getCostBreakdown(tenantId, bounds.lastYear[0], bounds.lastYear[1]),
+      getCostBreakdown(tenantId, bounds.lastMonth[0], bounds.lastMonth[1]),
+      getCostBreakdown(tenantId, bounds.lastWeek[0], bounds.lastWeek[1]),
+      getCostBreakdown(tenantId, bounds.lastDay[0], bounds.lastDay[1]),
+      getFleetSummary(tenantId),
+    ])
 
-    const outgoings = outgoingsGasoline + outgoingsRepair
-    const outgoingsYear = outgoingsGasolineYear + outgoingsRepairYear
-    const outgoingsWeek = outgoingsGasolineWeek + outgoingsRepairWeek
-    const outgoingsDay = outgoingsGasolineDay + outgoingsRepairDay
+    const outgoings = cbMonth.total
+    const outgoingsYear = cbYear.total
+    const outgoingsWeek = cbWeek.total
+    const outgoingsDay = cbDay.total
 
-    const outgoingsLastMonthGasoline = gasolineCostLastMonth.reduce((acc, curr) => acc + curr.Amount.toNumber(), 0)
-    const outgoingsLastYearGasoline = gasolineCostLastYear.reduce((acc, curr) => acc + curr.Amount.toNumber(), 0)
-    const outgoingsLastWeekGasoline = gasolineCostLastWeek.reduce((acc, curr) => acc + curr.Amount.toNumber(), 0)
-    const outgoingsLastDayGasoline = gasolineCostLastDay.reduce((acc, curr) => acc + curr.Amount.toNumber(), 0)    
-
-    const outgoingsLastMonthRepair = repairVehicleLastMonth.reduce((acc, curr) => acc + curr.CompanyPay.toNumber(), 0)
-    const outgoingsLastYearRepair = repairVehicleLastYear.reduce((acc, curr) => acc + curr.CompanyPay.toNumber(), 0)
-    const outgoingsLastWeekRepair = repairVehicleLastWeek.reduce((acc, curr) => acc + curr.CompanyPay.toNumber(), 0)
-    const outgoingsLastDayRepair = repairVehicleLastDay.reduce((acc, curr) => acc + curr.CompanyPay.toNumber(), 0)
-    
-    const outgoingsLastMonth = outgoingsLastMonthGasoline + outgoingsLastMonthRepair
-    const outgoingsLastYear = outgoingsLastYearGasoline + outgoingsLastYearRepair
-    const outgoingsLastWeek = outgoingsLastWeekGasoline + outgoingsLastWeekRepair
-    const outgoingsLastDay = outgoingsLastDayGasoline + outgoingsLastDayRepair
+    const outgoingsLastMonth = cbLastMonth.total
+    const outgoingsLastYear = cbLastYear.total
+    const outgoingsLastWeek = cbLastWeek.total
+    const outgoingsLastDay = cbLastDay.total
 
     // Percent change magnitude vs previous period: |current - base| / base.
     // Divide by the base (previous), not the current value. Direction is conveyed
@@ -153,6 +141,10 @@ export async function getDashboardController(req: IGetUserAuthInfoRequest, res: 
       profitWeek,
       profitDay,
       profitYear,
+      costBreakdown: cbMonth,
+      costBreakdownWeek: cbWeek,
+      costBreakdownYear: cbYear,
+      fleetSummary,
       graphData: [
         { name: 'ปีนี้', data: currentYearData },
         { name: 'ปีก่อนหน้า', data: lastYearData },
