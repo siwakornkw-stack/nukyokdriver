@@ -31,10 +31,20 @@ export async function importAuto(req: IGetUserAuthInfoRequest, res: Response, ne
     const updated = results.reduce((s, r) => s + r.updated, 0)
     const sub = results.reduce((s, r) => s + r.sub, 0)
     const duplicates = results.flatMap((r) => r.duplicates ?? [])
+    const vehicleCreated = results.filter((r) => r.type === 'vehicles').reduce((s, r) => s + r.created, 0)
+    const vehicleUpdated = results.filter((r) => r.type === 'vehicles').reduce((s, r) => s + r.updated, 0)
+    const recordCreated = created - vehicleCreated
+    const recordUpdated = updated - vehicleUpdated
+    const parts: string[] = []
+    if (vehicleCreated || vehicleUpdated) parts.push(`เพิ่มรถใหม่ ${vehicleCreated} คัน, อัปเดตรถ ${vehicleUpdated} คัน`)
+    if (recordCreated || recordUpdated) parts.push(`บันทึกรายการ ${recordCreated + recordUpdated} รายการ`)
+    if (sub) parts.push(`ประกัน/พรบ/ภาษี ${sub} รายการ`)
+    if (duplicates.length) parts.push(`ตัดแถวซ้ำ ${duplicates.length} รายการ`)
+    const message = parts.join(', ') || 'ไม่มีข้อมูลใหม่'
 
     res.json({
       success: true,
-      message: `เพิ่มใหม่ ${created} คัน, อัปเดต ${updated} คัน, ประกัน/พรบ/ภาษี ${sub} รายการ` + (duplicates.length ? `, ตัดแถวซ้ำ ${duplicates.length} รายการ` : ''),
+      message,
       fileName,
       results,
       duplicates,

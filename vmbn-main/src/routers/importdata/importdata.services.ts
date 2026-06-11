@@ -24,7 +24,12 @@ const decOrZero = (v: any): Prisma.Decimal => { const m = str(v).replace(/[^0-9.
 // Stable string parts so a fetched DB row and a to-be-created record produce the
 // same key. Dates -> epoch ms; decimals -> fixed(2) so "7470" == Decimal "7470.00".
 const kdate = (v: any): string => (v instanceof Date && !isNaN(v.getTime()) ? String(v.getTime()) : '')
-const kdec = (v: any): string => { const n = Number(v); return isNaN(n) ? '' : n.toFixed(2) }
+const kdec = (v: any): string => {
+  if (v === null || v === undefined || v === '') return ''
+  const s = String(v).replace(/[^0-9.-]/g, '')
+  if (!s) return ''
+  try { return new Prisma.Decimal(s).toFixed(2, 4) } catch { return '' }
+}
 
 const excelSerialToDate = (n: number): Date | null => {
   const d = new Date(Math.round((n - 25569) * 86400 * 1000))
@@ -107,7 +112,7 @@ const SYNONYMS: Record<string, string[]> = {
   receiveDate: ['วันรับรถ', 'วันที่รับรถ', 'รับรถ'],
   insurancePay: ['ประกันจ่าย', 'ประกันออก'],
   // ตาราง MA repair sheets put the line cost under a bare ราคา header.
-  companyPay: ['บริษัทจ่าย', 'บริษัทออก', 'ราคา'],
+  companyPay: ['บริษัทจ่าย', 'บริษัทออก', '^ราคา'],
   accidentDate: ['วันที่เกิดเหตุ', 'วันเกิดเหตุ'],
   accidentTime: ['เวลาเกิดเหตุ'],
   party: ['คู่กรณี', 'จำนวนคู่กรณี'],
@@ -136,11 +141,17 @@ const SYNONYMS: Record<string, string[]> = {
 }
 
 // Map a header cell to a canonical field name (or null).
+// Synonyms prefixed with '^' require exact match (prevents short words like 'ราคา'
+// from matching longer headers like 'ราคารวม' via substring inclusion).
 function canonical(header: string): string | null {
   const n = norm(header)
   if (!n) return null
   for (const [field, syns] of Object.entries(SYNONYMS)) {
-    if (syns.some((s) => { const sn = norm(s); return n === sn || n.includes(sn) })) return field
+    if (syns.some((s) => {
+      const exact = s.startsWith('^')
+      const sn = norm(exact ? s.slice(1) : s)
+      return exact ? n === sn : (n === sn || n.includes(sn))
+    })) return field
   }
   return null
 }
@@ -249,6 +260,7 @@ const matchModelId = (idx: { toks: string[]; id: string }[], model: string): str
 }
 
 const ZERO = new Prisma.Decimal(0)
+const MAX_PRICE = new Prisma.Decimal('99999999.99')
 
 interface SubBatches {
   ins: Prisma.InsurancePolicyVehicleCreateManyInput[]
@@ -432,6 +444,7 @@ async function importJobs(tenantId: string, username: string | undefined, rows: 
   const last = await db.driverJob.findFirst({ where: { TenantId: tenantId, JobNo: { not: null } }, orderBy: { JobNo: 'desc' }, select: { JobNo: true } })
   let jobNo = (last?.JobNo ?? 0) + 1
   const driverCache = new Map<string, string | null>()
+  const seenJobs = new Set<string>()
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]
     const origin = str(cell(row, colMap, 'origin'))
@@ -440,6 +453,10 @@ async function importJobs(tenantId: string, username: string | undefined, rows: 
     try {
       if (!origin && !destination && !driverName) { skipped++; continue }
       if (!origin) throw new Error('ต้องมีเนื้อหางาน')
+      const scheduledRaw = str(cell(row, colMap, 'scheduledAt'))
+      const jobKey = `${origin}|${destination}|${driverName}|${scheduledRaw}`
+      if (seenJobs.has(jobKey)) { skipped++; continue }
+      seenJobs.add(jobKey)
       let driverId: string | null = null
       if (driverName) {
         if (driverCache.has(driverName)) driverId = driverCache.get(driverName) as string | null
@@ -449,7 +466,7 @@ async function importJobs(tenantId: string, username: string | undefined, rows: 
         data: {
           TenantId: tenantId, JobNo: jobNo++, VehicleDriverId: driverId,
           Origin: origin, Destination: destination || '-',
-          ScheduledAt: dateOrNull(cell(row, colMap, 'scheduledAt')),
+          ScheduledAt: dateOrNull(scheduledRaw),
           Note: str(cell(row, colMap, 'note')) || null,
           Status: driverId ? 'pending' : 'unassigned', CreatedByUsername: username ?? 'import',
         },
@@ -669,15 +686,22 @@ function importRepair(tenantId: string, username: string | undefined, sheetName:
     if (!d) return null
     lastDate = d
     const qty = str(cell(row, colMap, 'qty'))
+    // Apply same dmyOrNull-first + BE 1950-1999 window to ReceiveDate.
+    const rawRd = cell(row, colMap, 'receiveDate')
+    let rd = (dmyOrNull(rawRd) ?? dateOrNull(rawRd))
+    if (rd) { const ry = rd.getFullYear(); if (ry >= 1950 && ry <= 1999) { rd = new Date(rd.getTime()); rd.setFullYear(ry + 57) } }
+    // Annotation text in the price cell ("52884 (รอบถัดไป)", "ยังไม่วางบิล",
+    // "ฟรี") is never a price — decOrZero would strip the Thai and read the
+    // leftover digits as baht. Cap at Decimal(10,2) max to prevent DB overflow
+    // from garbage values like phone numbers.
+    const rawPay = cell(row, colMap, 'companyPay')
+    const pay = /[ก-๙]/.test(str(rawPay)) ? ZERO : decOrZero(rawPay)
     return { VehicleId: vid, Status: 'active', RepairDate: d,
       Description: hasDesc ? (qty && qty !== '1' ? `${desc} (จำนวน ${qty})` : desc) : null,
       LicensePlate: str(cell(row, colMap, 'license')), RepairShop: str(cell(row, colMap, 'repairShop')),
-      ReceiveDate: dateOrNull(cell(row, colMap, 'receiveDate')) ?? d,
+      ReceiveDate: rd ?? d,
       InsurancePay: decOrZero(cell(row, colMap, 'insurancePay')),
-      // Annotation text in the price cell ("52884 (รอบถัดไป)", "ยังไม่วางบิล",
-      // "ฟรี") is never a price — decOrZero would strip the Thai and read the
-      // leftover digits as baht.
-      CompanyPay: /[ก-๙]/.test(str(cell(row, colMap, 'companyPay'))) ? ZERO : decOrZero(cell(row, colMap, 'companyPay')),
+      CompanyPay: pay.greaterThan(MAX_PRICE) ? ZERO : pay,
       CreatedByUsername: username ?? 'import' }
   }, (data) => db.repairVehicle.createMany({ data }), {
     keyOf: (r) => `${r.VehicleId}|${kdate(r.RepairDate)}|${str(r.RepairShop)}|${str(r.Description ?? '')}|${kdec(r.InsurancePay)}|${kdec(r.CompanyPay)}`,
@@ -885,23 +909,27 @@ export async function importWorkbook(tenantId: string, username: string | undefi
   const results: SheetResult[] = []
   for (let i = 0; i < sheets.length; i++) {
     const { name, matrix } = sheets[i]
-    if (matrix.length === 0) { results.push({ sheet: name, type: 'unknown', created: 0, updated: 0, sub: 0, skipped: 0, errors: ['ว่าง'] }); continue }
-    const m = mappings[i]
-    if (!m || m.type === 'unknown' || Object.keys(m.colMap).length === 0) {
-      results.push({ sheet: name, type: 'unknown', created: 0, updated: 0, sub: 0, skipped: 0, errors: ['ไม่รู้จักรูปแบบคอลัมน์ (ข้าม)'] })
-      continue
+    try {
+      if (matrix.length === 0) { results.push({ sheet: name, type: 'unknown', created: 0, updated: 0, sub: 0, skipped: 0, errors: ['ว่าง'] }); continue }
+      const m = mappings[i]
+      if (!m || m.type === 'unknown' || Object.keys(m.colMap).length === 0) {
+        results.push({ sheet: name, type: 'unknown', created: 0, updated: 0, sub: 0, skipped: 0, errors: ['ไม่รู้จักรูปแบบคอลัมน์ (ข้าม)'] })
+        continue
+      }
+      // The mapping is shared across sheets with the same header layout (one AI
+      // call for all), but the header can sit on a different row per sheet — the
+      // fingerprint keys on header text, not position. Re-detect the header row
+      // for THIS sheet so we don't slice away its first data row.
+      const sheetHeaderRow = detectHeader(matrix)?.headerRow ?? m.headerRow
+      const dataRows = matrix.slice(sheetHeaderRow + 1)
+      let r: CatResult
+      if (m.type === 'vehicles') r = await importVehicles(tenantId, username, dataRows, m.colMap)
+      else if (m.type === 'jobs') r = await importJobs(tenantId, username, dataRows, m.colMap)
+      else r = await CATEGORY_IMPORTERS[m.type](tenantId, username, name, dataRows, m.colMap)
+      results.push({ sheet: name, type: m.type, ...r })
+    } catch (e: any) {
+      results.push({ sheet: name, type: mappings[i]?.type ?? 'unknown', created: 0, updated: 0, sub: 0, skipped: 0, errors: [`import error: ${e?.message ?? 'unknown'}`] })
     }
-    // The mapping is shared across sheets with the same header layout (one AI
-    // call for all), but the header can sit on a different row per sheet — the
-    // fingerprint keys on header text, not position. Re-detect the header row
-    // for THIS sheet so we don't slice away its first data row.
-    const sheetHeaderRow = detectHeader(matrix)?.headerRow ?? m.headerRow
-    const dataRows = matrix.slice(sheetHeaderRow + 1)
-    let r: CatResult
-    if (m.type === 'vehicles') r = await importVehicles(tenantId, username, dataRows, m.colMap)
-    else if (m.type === 'jobs') r = await importJobs(tenantId, username, dataRows, m.colMap)
-    else r = await CATEGORY_IMPORTERS[m.type](tenantId, username, name, dataRows, m.colMap)
-    results.push({ sheet: name, type: m.type, ...r })
   }
 
   // Persist one reconcile log per import (income sheets only). Lets the history
