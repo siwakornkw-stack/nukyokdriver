@@ -275,10 +275,13 @@ type VehicleForResolver = { VehicleId: string; LicensePlatePrefix: string; Licen
 
 // Fuzzy vehicle finder (steps 2-3b). Does NOT create.
 // Step 2: suffix-unique — same suffix, candidate prefix is a subsequence of file prefix.
-// Step 3: compact-identity on parsed prefix+suffix or raw string vs plate compact or Model compact.
-// Step 3b: prefix-compact probe — existing compact is a prefix of file compact, len>=4.
+// Step 3: compact-identity (EXACT) on parsed prefix+suffix or raw string vs plate compact or
+//   Model compact. compact() strips paren-groups so "CAT307(-)" == "CAT 307".
+// Deliberately conservative — no loose prefix-probe: "SANY 140 C" must NOT collapse into model
+// "Sany140", nor "รถบด 10 T / xCMG" into plate "รถบด 10". Under-matching mints a recoverable
+// duplicate; over-matching silently attaches insurance/installments to the wrong vehicle.
 // Ambiguity: prefer the one plate-keyed candidate; else pick by oldest CreatedAt.
-function fuzzyFindVehicle(vehicles: VehicleForResolver[], prefix: string, suffix: string, raw: string): string | null {
+export function fuzzyFindVehicle(vehicles: VehicleForResolver[], prefix: string, suffix: string, raw: string): string | null {
   const fNormSuffix = norm(suffix)
   const fNormPrefix = norm(prefix)
 
@@ -303,8 +306,6 @@ function fuzzyFindVehicle(vehicles: VehicleForResolver[], prefix: string, suffix
     let match = false
     if (fC1 && (vCPlate === fC1 || vCModel === fC1)) match = true
     if (!match && fC2 && fC2 !== fC1 && (vCPlate === fC2 || vCModel === fC2)) match = true
-    if (!match && fC1 && vCPlate.length >= 4 && fC1.startsWith(vCPlate)) match = true
-    if (!match && fC1 && vCModel.length >= 4 && fC1.startsWith(vCModel)) match = true
     if (match && !seen.has(v.VehicleId)) { seen.add(v.VehicleId); hits.push(v) }
   }
   if (hits.length === 0) return null
@@ -867,7 +868,7 @@ interface InstallmentMatrixLayout {
 // Looks for a sub-header row with >=3 adjacent groups of (วันที่ชำระ, งวด, เลขที่ใบกำกับ within 2 cols)
 // AND a band row above with ทะเบียน + รายการทรัพย์สิน + ผ่อน-prefixed column.
 // Returns layout or null. Runs before the AI call so unrecognised shapes don't waste an AI call.
-function detectInstallmentMatrix(matrix: any[][]): InstallmentMatrixLayout | null {
+export function detectInstallmentMatrix(matrix: any[][]): InstallmentMatrixLayout | null {
   const limit = Math.min(matrix.length, 12)
   for (let r = 1; r < limit; r++) {
     const row = matrix[r] ?? []
@@ -1119,7 +1120,9 @@ export async function importWorkbook(tenantId: string, username: string | undefi
     try {
       if (matrix.length === 0) { results.push({ sheet: name, type: 'unknown', created: 0, updated: 0, sub: 0, skipped: 0, errors: ['ว่าง'] }); continue }
       const m = mappings[i]
-      if (!m || m.type === 'unknown' || Object.keys(m.colMap).length === 0) {
+      // installment-matrix carries an empty colMap by design (cols come from its own
+      // structural layout, not the synonym map) — exempt it from the empty-colMap skip.
+      if (!m || m.type === 'unknown' || (m.type !== 'installment-matrix' && Object.keys(m.colMap).length === 0)) {
         results.push({ sheet: name, type: 'unknown', created: 0, updated: 0, sub: 0, skipped: 0, errors: ['ไม่รู้จักรูปแบบคอลัมน์ (ข้าม)'] })
         continue
       }
