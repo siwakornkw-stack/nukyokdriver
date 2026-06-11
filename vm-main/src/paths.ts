@@ -9,6 +9,7 @@ export const paths = {
     driver: '/dashboard/driver',
     driverJobs: '/dashboard/driver-jobs',
     importData: '/dashboard/import',
+    help: '/dashboard/help',
     report: '/dashboard/report',
     dataAdmin: '/dashboard/data-admin',
 

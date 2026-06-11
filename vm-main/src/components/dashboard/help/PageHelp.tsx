@@ -1,0 +1,527 @@
+'use client';
+
+import * as React from 'react';
+import Accordion from '@mui/material/Accordion';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import AccordionSummary from '@mui/material/AccordionSummary';
+import Avatar from '@mui/material/Avatar';
+import Box from '@mui/material/Box';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import Chip from '@mui/material/Chip';
+import Divider from '@mui/material/Divider';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
+import type { Icon } from '@phosphor-icons/react/dist/lib/types';
+import { SignIn } from '@phosphor-icons/react/dist/ssr/SignIn';
+import { ChartPie } from '@phosphor-icons/react/dist/ssr/ChartPie';
+import { Car } from '@phosphor-icons/react/dist/ssr/Car';
+import { IdentificationCard } from '@phosphor-icons/react/dist/ssr/IdentificationCard';
+import { Truck } from '@phosphor-icons/react/dist/ssr/Truck';
+import { UploadSimple } from '@phosphor-icons/react/dist/ssr/UploadSimple';
+import { ChartBar } from '@phosphor-icons/react/dist/ssr/ChartBar';
+import { User } from '@phosphor-icons/react/dist/ssr/User';
+import { GearSix } from '@phosphor-icons/react/dist/ssr/GearSix';
+import { UsersThree } from '@phosphor-icons/react/dist/ssr/UsersThree';
+import { Trash } from '@phosphor-icons/react/dist/ssr/Trash';
+import { CaretDown } from '@phosphor-icons/react/dist/ssr/CaretDown';
+import { CheckCircle } from '@phosphor-icons/react/dist/ssr/CheckCircle';
+import { WarningCircle } from '@phosphor-icons/react/dist/ssr/WarningCircle';
+import { Lightbulb } from '@phosphor-icons/react/dist/ssr/Lightbulb';
+
+interface Step {
+  action: string;
+  detail?: string;
+}
+
+interface Section {
+  key: string;
+  title: string;
+  icon: Icon;
+  summary: string;
+  admin?: boolean;
+  steps: Step[];
+  fields?: string[];
+  notes?: string[];
+}
+
+// คำที่บ่งบอกว่าเป็นการกระทำที่กู้คืนไม่ได้ -> ทำให้หมายเหตุนั้นเป็นสีแดง
+const DANGER_WORDS = ['ถาวร', 'กู้คืนไม่ได้', 'ลบทั้งหมด'];
+const isDanger = (note: string): boolean => DANGER_WORDS.some((w) => note.includes(w));
+
+const GUIDE: Section[] = [
+  {
+    key: 'login',
+    title: 'การเข้าสู่ระบบ',
+    icon: SignIn,
+    summary:
+      'เข้าระบบด้วย "ชื่อผู้ใช้" (username ไม่ใช่อีเมล) และ "รหัสผ่าน" แล้วกด "เข้าสู่ระบบ" ระบบจะพาเข้าหน้าแดชบอร์ดให้เอง และกันผู้ที่ยังไม่ล็อกอินออกจากหน้าภายในอัตโนมัติ',
+    steps: [
+      { action: 'เปิดหน้าเข้าสู่ระบบ', detail: 'ถ้ายังไม่ล็อกอินแล้วพยายามเข้าหน้าอื่น ระบบจะเด้งกลับมาหน้านี้ให้เอง' },
+      { action: 'กรอกชื่อผู้ใช้', detail: 'พิมพ์ในช่อง "ชื่อผู้ใช้" (username ที่ได้รับมา ไม่ใช่อีเมล) ถ้าเว้นว่างจะขึ้น "โปรดกรอกชื่อผู้ใช้"' },
+      { action: 'กรอกรหัสผ่าน', detail: 'พิมพ์ในช่อง "รหัสผ่าน" กดไอคอนรูปดวงตาท้ายช่องเพื่อสลับแสดง/ซ่อนรหัสผ่านได้' },
+      { action: 'กดปุ่ม "เข้าสู่ระบบ"', detail: 'ระหว่างตรวจสอบ ปุ่มจะถูกปิดชั่วคราวกันกดซ้ำ' },
+      { action: 'เข้าสู่หน้าแดชบอร์ด', detail: 'ถ้าถูกต้อง ระบบจะพาเข้าหน้าแดชบอร์ดหลัก (ภาพรวม) อัตโนมัติ' },
+    ],
+    fields: ['ชื่อผู้ใช้', 'รหัสผ่าน (มีปุ่มดวงตาสลับแสดง/ซ่อน)', 'จำรหัสผ่านไม่ได้?', 'ปุ่ม เข้าสู่ระบบ'],
+    notes: [
+      'เข้าระบบด้วย "ชื่อผู้ใช้" (username) เท่านั้น ไม่ใช่อีเมล แม้หัวข้อจะเขียนว่า Sign in',
+      'ล็อกอินไม่ผ่าน จะมีกล่องข้อความสีแดงขึ้นเหนือปุ่ม แจ้งสาเหตุจากเซิร์ฟเวอร์',
+      'ผู้ใช้ทั่วไปสมัครเองไม่ได้ บัญชีใหม่ต้องให้แอดมินสร้างให้',
+      'ลิงก์ "จำรหัสผ่านไม่ได้?" ยังใช้งานจริงไม่ได้ ลืมรหัสต้องให้แอดมินตั้งใหม่ และล็อกอินโซเชียล (Google/Discord) ยังไม่เปิดใช้',
+    ],
+  },
+  {
+    key: 'overview',
+    title: 'แดชบอร์ด (ภาพรวม)',
+    icon: ChartPie,
+    summary:
+      'หน้าแรกหลังเข้าระบบ แสดงสรุปรายได้ ค่าใช้จ่าย กำไร และสัดส่วนเทียบเป้าหมาย พร้อมกราฟและตารางสรุปรายคันรถ เป็นหน้าดูข้อมูลอย่างเดียว ข้อมูลรีเฟรชเองทุก 30 วินาที',
+    steps: [
+      { action: 'เลือกช่วงเวลามุมขวาบน', detail: 'ปุ่ม ปีนี้ / เดือนนี้ / สัปดาห์นี้ ตัวเลขและกราฟจะเปลี่ยนตาม (คีย์ลัด Y=ปีนี้ M=เดือนนี้ W=สัปดาห์นี้)' },
+      { action: 'อ่านการ์ดสรุป 4 ใบด้านบน', detail: 'รายได้, ค่าใช้จ่าย, รวมกำไร, จำนวนรายได้ (% เทียบเป้าหมาย) มีลูกศรขึ้น/ลงเทียบกับช่วงก่อนหน้า' },
+      { action: 'ชี้ไอคอน i เพื่อดูคำอธิบาย', detail: 'เช่น รวมกำไร = รายได้ - ค่าใช้จ่าย' },
+      { action: 'ดูกราฟแท่ง "สรุปรายได้" และกราฟวงกลม "รวม"', detail: 'กราฟแท่งแบ่งแกนตามช่วงเวลาที่เลือก กราฟวงกลมเทียบค่าใช้จ่ายกับรายได้' },
+      { action: 'ใช้การ์ด "สรุปรายได้-รายจ่าย" ดูรายคันรถ', detail: 'กดช่อง เลือกช่วงวันที่ เลือกวันเริ่ม-สิ้นสุด ตารางจะแยกรายได้/ค่าใช้จ่ายตามรถแต่ละคัน' },
+      { action: 'กด "ดูทั้งหมด" เพื่อขยายตาราง', detail: 'ตารางแสดง 6 แถวแรก กด ดูทั้งหมด เพื่อแสดงครบ แล้วกด ย่อ เพื่อย่อกลับ' },
+    ],
+    fields: ['รายได้', 'ค่าใช้จ่าย', 'รวมกำไร', 'จำนวนรายได้ (%)', 'กราฟสรุปรายได้', 'กราฟวงกลมรวม', 'ตารางสรุปรายได้-รายจ่ายรายคัน', 'รายการ/ยานพาหนะล่าสุด'],
+    notes: [
+      'หน้านี้ดูข้อมูลอย่างเดียว ไม่มีการเพิ่ม/แก้/ลบ',
+      'ช่อง เลือกช่วงวันที่ เลือกอนาคตไม่ได้ และต้องเลือกครบทั้งวันเริ่มและวันสิ้นสุด ไม่งั้นตารางจะว่าง',
+      'แถวที่ทะเบียนขึ้นสีแดง + (ไม่ผูกรถ) คือรายการที่ยังไม่จับคู่กับรถในระบบ ควรผูกให้ถูก',
+      'ครั้งแรกอาจมีหน้าต่างเด้งขอให้เพิ่ม Line ID เพื่อเปิดรับการแจ้งเตือน ทำตามแล้วจะไม่เด้งอีก',
+    ],
+  },
+  {
+    key: 'vehicle',
+    title: 'ยานพาหนะ',
+    icon: Car,
+    summary:
+      'ศูนย์กลางจัดการรถทั้งหมด แสดงรถเป็นการ์ดรูปภาพ มีช่องค้นหาและปุ่มหลัก 4 ปุ่มมุมขวาบน (นำเข้า / Template / ข้อมูลซ้ำ / เพิ่ม) คลิกการ์ดรถเพื่อเปิดหน้าต่างรายละเอียด 13 แท็บสำหรับบันทึกประวัติและค่าใช้จ่ายของรถคันนั้น',
+    steps: [
+      { action: 'ดูรายการรถและค้นหา', detail: 'พิมพ์ในช่อง "ค้นหา ยานพาหนะ" ค้นได้จากทะเบียน/ยี่ห้อ/รุ่น/สี/คนขับ/รหัสรถ ปรับจำนวนการ์ดต่อหน้าได้ที่ "จำนวนที่แสดง" (6/12/26)' },
+      { action: 'เพิ่มรถใหม่ด้วยปุ่ม "เพิ่ม"', detail: 'เปิดฟอร์ม "เพิ่มยานพาหนะ" คลิกกรอบรูปเพื่ออัปโหลดรูป กรอกข้อมูล (ทุกช่องไม่บังคับ) เลือกประเภท/ยี่ห้อ/เชื้อเพลิงจากรายการ แล้วกด "บันทึก"' },
+      { action: 'จัดการรายการตัวเลือก', detail: 'กดไอคอนดินสอท้ายช่อง ประเภท/ยี่ห้อ/เชื้อเพลิง/เจ้าของ/หน่วยงาน/คนขับ เปิดหน้าต่าง "จัดการประเภท" เพื่อเพิ่ม/แก้ตัวเลือก' },
+      { action: 'นำเข้ารถจำนวนมากด้วย CSV', detail: 'กด "Template" ดาวน์โหลดไฟล์ตัวอย่างก่อน กรอกตามรูปแบบ แล้วกด "นำเข้า" เลือกไฟล์ .csv ระบบแสดงผลรายแถว (แถวที่/ทะเบียน/สถานะ)' },
+      { action: 'ดูรายละเอียดรถ (คลิกการ์ด)', detail: 'เปิดหน้าต่าง "ข้อมูลยานพาหนะ" 13 แท็บ แท็บ "หน้าหลัก" แสดงข้อมูลทั้งหมด พร้อมปุ่ม "แก้ไข"' },
+      { action: 'บันทึกประวัติ/ค่าใช้จ่ายในแท็บต่างๆ', detail: 'เปิดแท็บ (ภาษี/พรบ/กรมธรรม์/ยาง/อุบัติเหตุ/ซ่อม/ค่าน้ำมัน/ถ่ายน้ำมัน/ค่างวด/รายได้) กด "เพิ่มข้อมูล" กรอกในแถว แล้วกดไอคอนดิสก์เพื่อบันทึก ทุกแท็บนำเข้า CSV เฉพาะหัวข้อนั้นได้' },
+      { action: 'จัดการรูปและไฟล์แนบ', detail: 'แท็บ "รูป" กด เพิ่มรูป อัปโหลดได้หลายใบ แท็บ "แนบไฟล์" กด เพิ่มข้อมูล อัปโหลดไฟล์พร้อมชื่อ/รายละเอียด' },
+      { action: 'ลบทะเบียนซ้ำด้วยปุ่ม "ข้อมูลซ้ำ"', detail: 'เปิดหน้าต่าง "ตรวจสอบข้อมูลซ้ำ" เลือกคันที่ "เก็บไว้" ในแต่ละกลุ่ม คันที่เหลือจะถูกลบ ตรวจจำนวนแล้วกด "ลบข้อมูลซ้ำ"' },
+    ],
+    fields: [
+      'หน้าหลัก: ทะเบียน (หัว/หาง/จังหวัด), ประเภท, ยี่ห้อ, รุ่น, สี, เลขตัวถัง, เลขเครื่องยนต์, เชื้อเพลิง, ขนาดถัง, อัตราสิ้นเปลือง, ล้อ, ที่นั่ง, วันจดทะเบียน, เจ้าของ, หน่วยงาน, คนขับ, สถานะ, หมายเหตุ',
+      'ภาษี/พรบ: ปี, สิ้นสุดวันที่, ค่าเบี้ยรวม, บริษัทประกัน, โบรกเกอร์',
+      'กรมธรรม์: ปี, ประเภท, บริษัทประกัน, โบรกเกอร์, เริ่ม/สิ้นสุดวันที่, ค่าเบี้ยรวม',
+      'ยาง: วันที่เปลี่ยน, ตำแหน่ง, ยี่ห้อ',
+      'อุบัติเหตุ: วันที่, เวลา, เป็นฝ่าย, ทะเบียน, ผู้ขับขี่, คู่กรณี',
+      'ซ่อม: วันที่ซ่อม, รายการซ่อม, ซ่อมที่, วันรับรถ, ประกันจ่าย, บริษัทจ่าย',
+      'ค่าน้ำมัน: รายการ, ลิตร, บาท, เลขไมล์ไป/กลับ, วัน-เวลา',
+      'ถ่ายน้ำมัน: วันที่ครบ, ข้อความเตือน',
+      'ค่างวด: งวดที่, วันที่ครบ, หลักฐานการชำระ',
+      'รายได้: วันที่, รายละเอียด, ลูกค้า, รายได้, เลขใบงาน, คนขับ, เลขใบแจ้งหนี้, สถานะชำระ',
+    ],
+    notes: [
+      'หน้านี้ไม่มีปุ่มลบรถทีละคัน ลบรถทั้งคันต้องใช้เมนู "จัดการ/ลบข้อมูล" (เฉพาะ admin) ส่วนปุ่ม "ข้อมูลซ้ำ" ลบเฉพาะคันที่ทะเบียนซ้ำ',
+      'ในหน้าต่างข้อมูลซ้ำ ตรวจให้แน่ใจว่าเลือกคันที่ "เก็บไว้" ถูกต้องก่อนยืนยัน เพราะคันที่เหลือทั้งหมดจะถูกลบถาวร',
+      'ทุกช่องในฟอร์มรถไม่บังคับกรอก จึงบันทึกได้แม้ไม่ครบ ควรกรอกทะเบียนและข้อมูลสำคัญเองเพื่อกันข้อมูลซ้ำ/ค้นหายาก',
+      'แต่ละแท็บมีไฟล์ Template แยกของตัวเอง (คอลัมน์ต่างกัน) ต้องดาวน์โหลด Template ของแท็บนั้นก่อนทำ CSV และเปิดแท็บให้ถูกก่อนกดนำเข้า',
+      'ต้องเปิดรถคันใดคันหนึ่งก่อน (คลิกการ์ด) จึงจะเพิ่ม/แก้/นำเข้าข้อมูลในแท็บย่อยได้',
+    ],
+  },
+  {
+    key: 'driver',
+    title: 'จัดการคนขับ',
+    icon: IdentificationCard,
+    summary: 'เพิ่ม แก้ไข ลบรายชื่อคนขับ และผูกบัญชี LINE ของคนขับเข้าระบบ เพื่อใช้ส่งงานและแจ้งเตือนผ่าน LINE OA',
+    steps: [
+      { action: 'กดปุ่ม "เพิ่มคนขับ"', detail: 'ปุ่มมุมขวาบน เปิดหน้าต่างกรอกข้อมูลคนขับใหม่' },
+      { action: 'อัพโหลดรูปคนขับ (ถ้ามี)', detail: 'กดปุ่ม อัพโหลดรูป เลือกไฟล์ รอจนขึ้นรูปในวงกลม' },
+      { action: 'กรอกชื่อคนขับ', detail: 'ช่อง "ชื่อคนขับ" บังคับ ส่วนเบอร์โทรและเลขใบขับขี่ไม่บังคับ' },
+      { action: 'กดปุ่ม "บันทึก"', detail: 'ขึ้น "เพิ่มคนขับสำเร็จ" และแสดงในตาราง' },
+      { action: 'ผูก LINE ให้คนขับ', detail: 'กด "แก้ไข" คนขับก่อน (ช่อง LINE userId แสดงเฉพาะตอนแก้ไข) วาง userId (ขึ้นต้น U...) แล้วกด บันทึก' },
+      { action: 'หา LINE userId', detail: 'ให้คนขับทักหา LINE OA 1 ครั้ง ชื่อจะโผล่ในตาราง "ผู้ทักเข้า LINE OA" กดปุ่ม คัดลอก แล้วนำ userId ไปวางตอนแก้ไขคนขับ (กด รีเฟรช ถ้ายังไม่เห็นชื่อ)' },
+      { action: 'ลบคนขับ', detail: 'กดปุ่ม ลบ (สีแดง) ที่แถวคนขับ แล้วยืนยันในหน้าต่าง' },
+    ],
+    fields: ['รูป', 'ชื่อคนขับ (บังคับ)', 'เบอร์โทร', 'เลขใบขับขี่', 'LINE userId', 'คอลัมน์ตาราง: รถ, งาน, LINE, จัดการ'],
+    notes: [
+      'ช่อง LINE userId แสดงเฉพาะตอน "แก้ไข" คนขับ ตอนเพิ่มใหม่ผูก LINE ไม่ได้ ต้องบันทึกก่อนแล้วค่อยแก้ไขเพื่อผูก',
+      'การลบคนขับเป็นการลบถาวร กู้คืนไม่ได้ ต้องยืนยันก่อน',
+      'ถ้าคนขับไม่ทักหา LINE OA มาก่อน ชื่อจะไม่ขึ้นในตาราง และหา userId มาผูกไม่ได้',
+      'สถานะ LINE: "ผูกแล้ว" (ป้ายเขียว) คือมี userId แล้ว, "ยังไม่ผูก" คือยังไม่ได้ใส่',
+    ],
+  },
+  {
+    key: 'driver-jobs',
+    title: 'สั่งงานคนขับ',
+    icon: Truck,
+    summary:
+      'สั่งงานคนขับผ่าน LINE: สร้างงานก่อน (ใส่ได้หลายจุดในใบเดียว แนบลิงก์ Google Map ตั้งวัน-เวลานัด) แล้วเลือกคนขับในตารางแล้วกด "ส่ง LINE" ระบบส่งการ์ดให้คนขับกด "รับงาน/ปฏิเสธ" ทาง LINE ตารางแสดงสถานะงาน 6 แบบ',
+    steps: [
+      { action: 'กรอกเนื้อหางานจุดแรก', detail: 'ในกล่อง "งาน 1" ใส่ช่อง "เนื้อหางาน" (จำเป็นอย่างน้อย 1 งาน)' },
+      { action: 'แนบลิงก์ Google Map (ถ้ามี)', detail: 'วางลิงก์แผนที่ในช่อง "จุดหมายปลายทาง" ถ้าขึ้นต้นด้วย http จะกลายเป็นปุ่ม "เปิดแผนที่" ในตาราง' },
+      { action: 'เพิ่มงานหลายจุด', detail: 'กด "เพิ่มช่องงาน" เพิ่มกล่อง งาน 2/งาน 3... แต่ละกล่องมีเนื้อหางาน+ลิงก์ของตัวเอง กด X เพื่อลบกล่อง' },
+      { action: 'ตั้งวัน-เวลานัด (ไม่บังคับ)', detail: 'ช่อง "วัน-เวลา" เลือกจากปฏิทิน (ทีละ 15 นาที)' },
+      { action: 'กดปุ่ม "สร้างงาน"', detail: 'งานจะไปโผล่ในตาราง "รายการงาน" ด้วยสถานะ "ยังไม่เลือกคนขับ" (ยังไม่ส่งหา LINE ในขั้นนี้)' },
+      { action: 'เลือกคนขับในตาราง', detail: 'แถวสถานะ "ยังไม่เลือกคนขับ"/"ปฏิเสธ" จะมีช่องเลือกคนขับ ชื่อที่มี "(LINE ✓)" คือผูก LINE แล้ว' },
+      { action: 'กด "ส่ง LINE"', detail: 'ระบบมอบหมายงานและส่งการ์ดให้คนขับทาง LINE สถานะเปลี่ยนเป็น "รอตอบรับ"' },
+      { action: 'รอคนขับตอบรับ', detail: 'เมื่อคนขับกดในการ์ด สถานะจะเป็น "รับงาน" หรือ "ปฏิเสธ" ถ้าปฏิเสธ เลือกคนใหม่แล้วส่งซ้ำได้' },
+      { action: 'ยกเลิกงาน', detail: 'กดปุ่ม "ยกเลิก" (สีแดง) มีเฉพาะสถานะ ยังไม่เลือกคนขับ/ปฏิเสธ/รอตอบรับ/รับงาน' },
+    ],
+    fields: ['เนื้อหางาน (บังคับ)', 'จุดหมายปลายทาง (ลิงก์ Google Map)', 'วัน-เวลา', 'หมายเหตุ', 'ปุ่ม เพิ่มช่องงาน/สร้างงาน', 'ตาราง: คนขับ, เนื้อหางาน, เวลา, สถานะ, จัดการ', 'สถานะ 6 แบบ: ยังไม่เลือกคนขับ/รอตอบรับ/รับงาน/ปฏิเสธ/ยกเลิก/เสร็จสิ้น'],
+    notes: [
+      'การสร้างงานยังไม่ส่งหาคนขับ ต้องไปเลือกคนขับและกด "ส่ง LINE" ในตารางอีกขั้นเสมอ',
+      'คนขับที่ขึ้น "(ยังไม่ผูก LINE)" ส่งการ์ดทาง LINE ไม่ได้ ควรเลือกคนที่มี "(LINE ✓)"',
+      'การยกเลิกงานกดแล้วทำงานทันที (ไม่มีหน้าต่างยืนยันซ้ำ) ก่อนกดควรแน่ใจ',
+      'ปุ่มตามสถานะ: รอตอบรับ/รับงาน = มีแค่ปุ่มยกเลิก, ยกเลิก/เสร็จสิ้น = ไม่มีปุ่มจัดการ',
+    ],
+  },
+  {
+    key: 'import',
+    title: 'นำเข้าข้อมูล',
+    icon: UploadSimple,
+    summary:
+      'อัปโหลดไฟล์ข้อมูลดิบ (Excel/CSV/JSON) ทีละไฟล์ ระบบ AI ตรวจอัตโนมัติว่าแต่ละ sheet เป็นข้อมูลประเภทไหน (รถ/สั่งงาน/ซ่อม/อุบัติเหตุ/ค่าน้ำมัน/เปลี่ยนน้ำมัน/ค่างวด/รายได้/ประกัน) แล้วบันทึกให้เอง พร้อมสรุปผลเพิ่ม/อัปเดต/ข้าม',
+    steps: [
+      { action: 'กดปุ่ม "เลือกไฟล์"', detail: 'รองรับ .xlsx, .xls, .csv, .json (xlsx รองรับหลาย sheet ในไฟล์เดียว)' },
+      { action: '(ไม่บังคับ) กด "เช็ค AI ก่อนนำเข้า"', detail: 'ดูว่าระบบ AI พร้อมไหม เช่น พร้อม/quota เต็ม/โหลดสูง/ไม่มี key ถ้าไม่พร้อมควรรอ' },
+      { action: 'กดปุ่ม "นำเข้าข้อมูล"', detail: 'ปุ่มกดได้เมื่อเลือกไฟล์แล้ว ระหว่างทำงานขึ้น "กำลังนำเข้า..." ห้ามปิดหน้าจอ' },
+      { action: 'อ่านแถบแจ้งผลและตาราง "ผลการนำเข้า"', detail: 'ดูว่าแต่ละ sheet เป็นชนิดอะไร เพิ่มใหม่/อัปเดต/ข้ามกี่รายการ และข้อผิดพลาด' },
+      { action: 'ตรวจการ์ด "จุดที่ซ้ำในไฟล์" (ถ้ามี)', detail: 'ดูแถวที่ซ้ำกันในไฟล์ซึ่งระบบตัดทิ้ง เพื่อแก้ไฟล์ต้นทาง' },
+    ],
+    fields: ['ปุ่ม เลือกไฟล์/เช็ค AI/นำเข้าข้อมูล', 'ตารางผล: Sheet, ชนิด, เพิ่มใหม่, อัปเดต, ประกัน/พรบ/ภาษี, ข้าม, ข้อผิดพลาด'],
+    notes: [
+      'ไฟล์ต้องไม่เกิน 4 MB ถ้าใหญ่เกินจะเลือกไม่ได้ ถ้า Excel มีรูปฝังอยู่ ให้ลบรูปหรือ Save As เป็น .csv ก่อน',
+      'นำเข้าได้ทีละ 1 ไฟล์ ถ้ามีหลายไฟล์ต้องทำซ้ำทีละไฟล์',
+      'ชนิด "ไม่รู้จัก" แปลว่า AI แยกประเภท sheet นั้นไม่ได้ ควรแก้หัวตาราง/ชื่อ sheet ให้ชัดแล้วลองใหม่',
+      'คอลัมน์ "อัปเดต" คือระบบเขียนทับข้อมูลเดิมที่ตรงกัน ควรตรวจไฟล์ให้ถูกก่อนอัปโหลด',
+    ],
+  },
+  {
+    key: 'report',
+    title: 'รายงานสรุป',
+    icon: ChartBar,
+    summary:
+      'ดูสรุปค่าน้ำมันและรายได้ของรถแต่ละคันตามช่วงเวลาที่เลือก มีตัวกรอง 3 ช่อง (ปี พ.ศ. / เดือน / ทะเบียน) การ์ดสรุป 3 ใบ (ค่าน้ำมันรวม/รายได้รวม/กำไร) และตาราง 2 แท็บ (ค่าน้ำมัน/รายได้) export CSV ได้',
+    steps: [
+      { action: 'เลือกปี (พ.ศ.)', detail: 'แสดงเป็น พ.ศ. (ย้อนหลัง 5 ปี) หรือเลือก "ทั้งหมด"' },
+      { action: 'เลือกเดือน', detail: 'มกราคม-ธันวาคม หรือ "ทั้งปี" (ช่องเดือนกดไม่ได้จนกว่าจะเลือกปีก่อน)' },
+      { action: 'เลือกทะเบียนรถ', detail: '"ทุกคัน" หรือเฉพาะคัน รายการทะเบียนขึ้นเองจากข้อมูลในช่วงที่เลือก' },
+      { action: 'ดูการ์ดสรุป 3 ใบ', detail: 'ค่าน้ำมันรวม / รายได้รวม / กำไร (= รายได้รวม - ค่าน้ำมันรวม) ปรับตามตัวกรองทันที' },
+      { action: 'สลับแท็บดูตาราง', detail: 'แท็บ "ค่าน้ำมัน" ดูรายครั้ง, แท็บ "รายได้" สรุปแยกตามคัน/คนขับ' },
+      { action: 'เรียงลำดับตาราง', detail: 'คลิกหัวคอลัมน์ คลิกซ้ำเพื่อสลับน้อย-มาก/มาก-น้อย' },
+      { action: 'ดาวน์โหลดเป็น CSV', detail: 'กด "export CSV" ได้เฉพาะตารางของแท็บที่เปิดอยู่ เปิดใน Excel อ่านภาษาไทยถูก' },
+    ],
+    fields: ['ตัวกรอง: ปี (พ.ศ.), เดือน, ทะเบียน', 'การ์ด: ค่าน้ำมันรวม, รายได้รวม, กำไร', 'แท็บค่าน้ำมัน: วันที่, ทะเบียน, รายการ, เลขใบกำกับภาษี, ลิตร, ยอดเงิน, ไมล์เริ่ม/จบ, ระยะทาง', 'แท็บรายได้: ทะเบียน, ประเภท, คนขับ, จำนวนเที่ยว, รายได้รวม, เฉลี่ย/เที่ยว, ล่าสุด'],
+    notes: [
+      'หน้าดูข้อมูลอย่างเดียว ไม่มีเพิ่ม/แก้/ลบ',
+      'กำไรติดลบ (ขาดทุน) ตัวเลขในการ์ดจะเป็นสีแดง ถ้าเป็นบวกจะเขียว',
+      'export CSV ได้เฉพาะตารางของแท็บที่เปิดอยู่ ต้องการทั้งสองให้ export ทีละแท็บ',
+      'ถ้าไม่มีข้อมูลจะขึ้น "ไม่มีข้อมูลในช่วงวันที่ที่เลือก" ลองขยายช่วงหรือเลือก ทั้งหมด/ทุกคัน',
+    ],
+  },
+  {
+    key: 'account',
+    title: 'บัญชี (โปรไฟล์)',
+    icon: User,
+    summary: 'แก้ไขโปรไฟล์ของตัวเอง ทั้งรูปโปรไฟล์ ชื่อ อีเมล เบอร์มือถือ และ Line ID',
+    steps: [
+      { action: 'เปิดหน้า "บัญชี"', detail: 'ซ้ายเป็นการ์ดรูปโปรไฟล์ ขวาเป็นฟอร์มข้อมูลส่วนตัว' },
+      { action: 'อัพโหลดรูปโปรไฟล์', detail: 'กดปุ่ม "อัพโหลดรูปโปรไฟล์" ใต้รูป เลือกไฟล์ภาพ รูปจะ preview ทันที' },
+      { action: 'แก้ข้อมูลส่วนตัว', detail: 'ช่อง ชื่อ, อีเมล์, เบอร์มือถือ, Line ID' },
+      { action: 'กดปุ่ม "บันทึก"', detail: 'ระบบอัปโหลดรูป (ถ้าเลือก) แล้วบันทึกข้อมูล ขึ้น toast แจ้งผล' },
+    ],
+    fields: ['รูปโปรไฟล์', 'ชื่อ', 'อีเมล์', 'เบอร์มือถือ', 'Line ID', 'ปุ่ม บันทึก'],
+    notes: [
+      'รูปต้องเป็นไฟล์ภาพ ถ้าไม่เลือกรูปใหม่ ระบบใช้รูปเดิม (หรือ avatar เริ่มต้นถ้าไม่เคยมี)',
+      'Line ID ในหน้านี้เป็นข้อมูลโปรไฟล์ ไม่ใช่การผูก LINE ของคนขับ (คนละส่วนกับหน้า จัดการคนขับ)',
+    ],
+  },
+  {
+    key: 'settings',
+    title: 'ตั้งค่า',
+    icon: GearSix,
+    summary: 'หน้าเปลี่ยนรหัสผ่านของบัญชีที่กำลังใช้งานอยู่ มีกล่อง "รหัสผ่าน" ช่องกรอก 2 ช่อง และปุ่มยืนยัน',
+    steps: [
+      { action: 'กรอกรหัสผ่านใหม่', detail: 'ช่อง "รหัสผ่าน" ตัวอักษรจะถูกซ่อนเป็นจุด' },
+      { action: 'กรอกยืนยันรหัสผ่าน', detail: 'ช่อง "รหัสผ่านอีกครั้ง" พิมพ์ให้ตรงกับช่องแรก' },
+      { action: 'กดปุ่ม "ยืนยัน"', detail: 'ปุ่มมุมขวาล่างของกล่อง' },
+    ],
+    fields: ['รหัสผ่าน', 'รหัสผ่านอีกครั้ง', 'ปุ่ม ยืนยัน'],
+    notes: [
+      'หน้านี้มีเฉพาะส่วนเปลี่ยนรหัสผ่าน ไม่มีการตั้งค่าอื่น',
+      'หมายเหตุ: เวอร์ชันปัจจุบันฟอร์มนี้เป็นหน้าตา (UI) เท่านั้น ยังไม่ได้ส่งบันทึกจริงและไม่มีข้อความแจ้งผล หากต้องเปลี่ยนรหัสจริงให้ติดต่อแอดมิน',
+    ],
+  },
+  {
+    key: 'admin',
+    title: 'ระบบจัดการผู้ใช้งาน',
+    icon: UsersThree,
+    admin: true,
+    summary: 'สำหรับแอดมินจัดการบัญชีผู้ใช้ทั้งหมด เพิ่มผู้ใช้ใหม่ ดูรายชื่อ เปลี่ยนสิทธิ์ (admin/staff/viewer) และปิดบัญชี',
+    steps: [
+      { action: 'กดปุ่ม "เพิ่มผู้ใช้"', detail: 'เปิดหน้าต่างกรอกข้อมูลผู้ใช้ใหม่' },
+      { action: 'กรอกข้อมูล', detail: 'ชื่อ, Username, รหัสผ่าน, เบอร์โทร, อีเมล และเลือกสิทธิ์ (ค่าเริ่มต้น staff)' },
+      { action: 'กดปุ่ม "บันทึก"', detail: 'สำเร็จขึ้น "เพิ่มผู้ใช้สำเร็จ" และปิดหน้าต่างเอง' },
+      { action: 'เปลี่ยนสิทธิ์ผู้ใช้', detail: 'ที่ช่อง "เปลี่ยนสิทธิ์" ในแถวผู้ใช้ เลือกสิทธิ์ใหม่ ระบบบันทึกทันที' },
+      { action: 'ปิดบัญชีผู้ใช้', detail: 'กดปุ่ม "ปิดบัญชี" (สีแดง) ในคอลัมน์จัดการ แล้วยืนยันในหน้าต่าง' },
+    ],
+    fields: ['ชื่อ', 'Username (บังคับ)', 'รหัสผ่าน (บังคับ, อย่างน้อย 6 ตัว)', 'เบอร์โทร (บังคับ)', 'อีเมล', 'สิทธิ์', 'เปลี่ยนสิทธิ์', 'จัดการ'],
+    notes: [
+      'ช่องบังคับตอนเพิ่ม: Username, รหัสผ่าน (อย่างน้อย 6 ตัว), เบอร์โทร',
+      'สิทธิ์ 3 ระดับ: ผู้ดูแลระบบ (admin), พนักงาน (staff), ดูอย่างเดียว (viewer)',
+      'เปลี่ยนสิทธิ์ของตัวเองและปิดบัญชีตัวเองไม่ได้ (ปุ่มถูกปิดในแถวบัญชีที่ล็อกอินอยู่)',
+      'การเปลี่ยนสิทธิ์มีผลทันทีที่เลือก ไม่มีปุ่มยืนยันแยก',
+    ],
+  },
+  {
+    key: 'data-admin',
+    title: 'จัดการ/ลบข้อมูล',
+    icon: Trash,
+    admin: true,
+    summary:
+      'เมนูแอดมิน ค้นหาและลบข้อมูลรายชนิด (ค่าน้ำมัน/ซ่อม/รายได้ ฯลฯ) ลบรถพร้อมข้อมูลลูกทั้งหมด และดูประวัติการ import รายได้ การลบทุกแบบเป็นการลบถาวร กู้คืนไม่ได้',
+    steps: [
+      { action: 'เลือกชนิดข้อมูลและกรอง', detail: 'ช่อง "ชนิดข้อมูล" (เช่น ค่าน้ำมัน) แล้วเลือก รถ (ทั้งหมด/เฉพาะคัน), ตั้งแต่วันที่, ถึงวันที่' },
+      { action: 'กดปุ่ม "ค้นหา"', detail: 'แสดงผลในตาราง (วันที่/รถ/รายละเอียด) พร้อมจำนวนรวม' },
+      { action: 'เลือกแถวที่จะลบ', detail: 'ติ๊ก checkbox รายแถว หรือที่หัวตารางเพื่อเลือกทั้งหน้า' },
+      { action: 'ลบที่เลือก', detail: 'ปุ่ม "ลบที่เลือก (n)" ลบเฉพาะแถวที่ติ๊ก' },
+      { action: 'หรือ ลบทั้งหมดตามเงื่อนไข', detail: 'ปุ่มสีแดง "ลบทั้งหมดตามเงื่อนไข" ลบทุกรายการที่ตรงตัวกรอง (ต้องตั้งตัวกรองอย่างน้อย 1 อย่าง)' },
+      { action: 'ยืนยันในกล่อง', detail: 'ระบบ preview จำนวนจริงที่จะลบ กด "ยืนยันลบ" เพื่อลบถาวร' },
+      { action: 'ลบรถทั้งคัน', detail: 'การ์ด "ลบรถ/เครื่องจักร" ด้านล่าง ค้นหาทะเบียน/รุ่น เลือกคัน กด ลบที่เลือก ระบบ preview จำนวนรถ + ข้อมูลลูก แล้วยืนยัน' },
+      { action: 'ดูประวัติ import รายได้', detail: 'การ์ดประวัติ เทียบยอดในไฟล์ vs เข้า DB จริง และส่วนที่ตัดซ้ำ/มีอยู่แล้ว' },
+    ],
+    fields: ['ชนิดข้อมูล, รถ, ตั้งแต่วันที่, ถึงวันที่, ปุ่มค้นหา', 'ตารางผล: วันที่, รถ, รายละเอียด', 'ปุ่ม ลบที่เลือก (n) / ลบทั้งหมดตามเงื่อนไข', 'การ์ดลบรถ: ทะเบียน, รุ่น/รายการ, สถานะ', 'ประวัติ import: เวลานำเข้า, ไฟล์, ผู้ใช้, ในไฟล์, เข้า DB, ตัดซ้ำในไฟล์, มีอยู่แล้ว'],
+    notes: [
+      'เมนูนี้สำหรับผู้ดูแลระบบ (admin) เท่านั้น',
+      'การลบทุกแบบเป็นการลบถาวร กู้คืนไม่ได้ มีกล่องยืนยัน preview จำนวนก่อนเสมอ ตรวจให้แน่ใจก่อนกดยืนยันลบ',
+      '"ลบทั้งหมดตามเงื่อนไข" จะลบครบทุกรายการที่ตรงตัวกรอง ไม่ใช่แค่ที่เห็นบนหน้าจอ (เช่น แสดง 50 จาก 500 จะลบ 500)',
+      'ลบรถ จะลบข้อมูลที่ผูกกับรถทั้งหมดด้วย (ค่าน้ำมัน/ซ่อม/อุบัติเหตุ/ผ่อน/รายได้/ประกัน/ภาษี/พรบ/รูป)',
+    ],
+  },
+];
+
+function StepList({ steps }: { steps: Step[] }): React.JSX.Element {
+  return (
+    <Stack component="ol" spacing={1.5} sx={{ listStyle: 'none', m: 0, p: 0 }}>
+      {steps.map((s, i) => (
+        <Stack key={i} component="li" direction="row" spacing={1.5} alignItems="flex-start">
+          <Avatar
+            sx={{
+              width: 26,
+              height: 26,
+              fontSize: 13,
+              fontWeight: 700,
+              flexShrink: 0,
+              mt: '2px',
+              bgcolor: 'var(--mui-palette-primary-main)',
+              color: 'var(--mui-palette-primary-contrastText)',
+            }}
+          >
+            {i + 1}
+          </Avatar>
+          <Box>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+              {s.action}
+            </Typography>
+            {s.detail ? (
+              <Typography variant="body2" color="text.secondary">
+                {s.detail}
+              </Typography>
+            ) : null}
+          </Box>
+        </Stack>
+      ))}
+    </Stack>
+  );
+}
+
+function SectionBlock({ section }: { section: Section }): React.JSX.Element {
+  const SectionIcon = section.icon;
+  return (
+    <Box>
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+        <SectionIcon size={18} weight="bold" color="var(--mui-palette-primary-main)" />
+        <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+          ขั้นตอนการใช้งาน
+        </Typography>
+      </Stack>
+      <StepList steps={section.steps} />
+
+      {section.fields && section.fields.length > 0 ? (
+        <Box sx={{ mt: 2.5 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.secondary', mb: 1 }}>
+            ช่องข้อมูล / คอลัมน์ในหน้านี้
+          </Typography>
+          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+            {section.fields.map((f, i) => (
+              <Chip key={i} label={f} size="small" variant="outlined" sx={{ height: 'auto', py: 0.5, '& .MuiChip-label': { whiteSpace: 'normal', display: 'block' } }} />
+            ))}
+          </Stack>
+        </Box>
+      ) : null}
+
+      {section.notes && section.notes.length > 0 ? (
+        <Box sx={{ mt: 2.5 }}>
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+            <Lightbulb size={18} weight="fill" color="var(--mui-palette-warning-main)" />
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+              ข้อควรรู้ / ข้อควรระวัง
+            </Typography>
+          </Stack>
+          <Stack spacing={1}>
+            {section.notes.map((n, i) => {
+              const danger = isDanger(n);
+              return (
+                <Stack
+                  key={i}
+                  direction="row"
+                  spacing={1}
+                  alignItems="flex-start"
+                  sx={{
+                    p: 1.25,
+                    borderRadius: 1,
+                    bgcolor: danger ? 'var(--mui-palette-error-50, #fef3f2)' : 'var(--mui-palette-warning-50, #fffaeb)',
+                    border: '1px solid',
+                    borderColor: danger ? 'var(--mui-palette-error-200, #fecdca)' : 'var(--mui-palette-warning-200, #fedf89)',
+                  }}
+                >
+                  <WarningCircle
+                    size={18}
+                    weight="fill"
+                    color={danger ? 'var(--mui-palette-error-main)' : 'var(--mui-palette-warning-main)'}
+                    style={{ flexShrink: 0, marginTop: 2 }}
+                  />
+                  <Typography variant="body2" sx={{ color: 'text.primary' }}>
+                    {n}
+                  </Typography>
+                </Stack>
+              );
+            })}
+          </Stack>
+        </Box>
+      ) : null}
+    </Box>
+  );
+}
+
+export default function PageHelp(): React.JSX.Element {
+  const [expanded, setExpanded] = React.useState<string>('login');
+
+  const jumpTo = (key: string): void => {
+    setExpanded(key);
+    // รอให้ accordion ขยายก่อนค่อยเลื่อน
+    window.setTimeout(() => {
+      document.getElementById(`help-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 60);
+  };
+
+  return (
+    <Stack spacing={3}>
+      <Box>
+        <Typography variant="h4">วิธีใช้งาน</Typography>
+        <Typography color="text.secondary" sx={{ mt: 0.5 }}>
+          คู่มือการใช้งานระบบบริหารงานพาหนะ ครอบคลุมทุกเมนูตั้งแต่เข้าสู่ระบบจนถึงการจัดการข้อมูล
+        </Typography>
+      </Box>
+
+      <Card>
+        <CardContent>
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
+            <CheckCircle size={20} weight="fill" color="var(--mui-palette-success-main)" />
+            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+              ทางลัดไปแต่ละหัวข้อ
+            </Typography>
+          </Stack>
+          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+            {GUIDE.map((s) => {
+              const SectionIcon = s.icon;
+              return (
+                <Chip
+                  key={s.key}
+                  icon={<SectionIcon size={16} weight="bold" />}
+                  label={s.admin ? `${s.title} (admin)` : s.title}
+                  onClick={() => jumpTo(s.key)}
+                  variant="outlined"
+                  sx={{ cursor: 'pointer' }}
+                />
+              );
+            })}
+          </Stack>
+        </CardContent>
+      </Card>
+
+      <Box>
+        {GUIDE.map((section, idx) => {
+          const SectionIcon = section.icon;
+          return (
+            <Accordion
+              key={section.key}
+              id={`help-${section.key}`}
+              expanded={expanded === section.key}
+              onChange={(_, isExp) => setExpanded(isExp ? section.key : '')}
+              disableGutters
+              sx={{
+                mb: 1.5,
+                borderRadius: 2,
+                border: '1px solid var(--mui-palette-divider)',
+                '&:before': { display: 'none' },
+                boxShadow: 'none',
+                overflow: 'hidden',
+              }}
+            >
+              <AccordionSummary expandIcon={<CaretDown size={18} />} sx={{ px: 2, py: 1 }}>
+                <Stack direction="row" spacing={2} alignItems="center" sx={{ width: '100%' }}>
+                  <Avatar
+                    sx={{
+                      width: 40,
+                      height: 40,
+                      bgcolor: 'var(--mui-palette-primary-50, #f4f3ff)',
+                      color: 'var(--mui-palette-primary-main)',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <SectionIcon size={22} weight="duotone" />
+                  </Avatar>
+                  <Box sx={{ minWidth: 0, flex: 1 }}>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                        {idx + 1}. {section.title}
+                      </Typography>
+                      {section.admin ? (
+                        <Chip label="เฉพาะ admin" size="small" color="warning" variant="outlined" sx={{ height: 20, fontSize: 11 }} />
+                      ) : null}
+                    </Stack>
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+                      {section.summary}
+                    </Typography>
+                  </Box>
+                </Stack>
+              </AccordionSummary>
+              <Divider />
+              <AccordionDetails sx={{ px: 2, py: 2.5, bgcolor: 'var(--mui-palette-background-default)' }}>
+                <SectionBlock section={section} />
+              </AccordionDetails>
+            </Accordion>
+          );
+        })}
+      </Box>
+
+      <Card>
+        <CardContent>
+          <Stack direction="row" spacing={1.5} alignItems="flex-start">
+            <Lightbulb size={22} weight="fill" color="var(--mui-palette-primary-main)" style={{ flexShrink: 0, marginTop: 2 }} />
+            <Box>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                ต้องการความช่วยเหลือเพิ่มเติม?
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                หากพบปัญหาการใช้งาน เมนูที่ต้องการสิทธิ์ admin หรือต้องการรีเซ็ตรหัสผ่าน ให้ติดต่อผู้ดูแลระบบขององค์กร
+              </Typography>
+            </Box>
+          </Stack>
+        </CardContent>
+      </Card>
+    </Stack>
+  );
+}

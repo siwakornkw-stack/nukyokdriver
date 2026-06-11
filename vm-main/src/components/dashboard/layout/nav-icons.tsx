@@ -10,6 +10,7 @@ import { UserGear as UserGearIcon } from '@phosphor-icons/react/dist/ssr/UserGea
 import { IdentificationCard as IdentificationCardIcon } from '@phosphor-icons/react/dist/ssr/IdentificationCard';
 import { XSquare } from '@phosphor-icons/react/dist/ssr/XSquare';
 import { Trash as TrashIcon } from '@phosphor-icons/react/dist/ssr/Trash';
+import { BookOpen as BookOpenIcon } from '@phosphor-icons/react/dist/ssr/BookOpen';
 
 export const navIcons = {
   'chart-pie': ChartPieIcon,
@@ -23,4 +24,5 @@ export const navIcons = {
   truck: TruckIcon,
   upload: UploadIcon,
   trash: TrashIcon,
+  'book-open': BookOpenIcon,
 } as Record<string, Icon>;
