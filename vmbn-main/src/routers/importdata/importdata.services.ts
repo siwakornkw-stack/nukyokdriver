@@ -174,7 +174,7 @@ export function detectHeader(matrix: any[][]): { headerRow: number; colMap: Reco
   return best ? { headerRow: best.headerRow, colMap: best.colMap } : null
 }
 
-export type SheetType = 'vehicles' | 'jobs' | 'repair' | 'accident' | 'fuel' | 'oil' | 'installment' | 'income' | 'unknown'
+export type SheetType = 'vehicles' | 'jobs' | 'repair' | 'accident' | 'fuel' | 'oil' | 'installment' | 'installment-matrix' | 'income' | 'unknown'
 
 export interface SheetResult {
   sheet: string
@@ -262,6 +262,59 @@ const matchModelId = (idx: { toks: string[]; id: string }[], model: string): str
 const ZERO = new Prisma.Decimal(0)
 const MAX_PRICE = new Prisma.Decimal('99999999.99')
 
+// compact(x) = norm(strip paren-groups). Differs from norm(): compact('CAT313(ใหม่)') = 'cat313'
+const compact = (s: string): string => norm(str(s).replace(/\([^)]*\)/g, ''))
+
+function isSubsequence(a: string, b: string): boolean {
+  let ai = 0
+  for (let bi = 0; bi < b.length && ai < a.length; bi++) { if (b[bi] === a[ai]) ai++ }
+  return ai === a.length
+}
+
+type VehicleForResolver = { VehicleId: string; LicensePlatePrefix: string; LicensePlateSuffix: string; Model: string; CreatedAt: Date }
+
+// Fuzzy vehicle finder (steps 2-3b). Does NOT create.
+// Step 2: suffix-unique — same suffix, candidate prefix is a subsequence of file prefix.
+// Step 3: compact-identity on parsed prefix+suffix or raw string vs plate compact or Model compact.
+// Step 3b: prefix-compact probe — existing compact is a prefix of file compact, len>=4.
+// Ambiguity: prefer the one plate-keyed candidate; else pick by oldest CreatedAt.
+function fuzzyFindVehicle(vehicles: VehicleForResolver[], prefix: string, suffix: string, raw: string): string | null {
+  const fNormSuffix = norm(suffix)
+  const fNormPrefix = norm(prefix)
+
+  if (fNormSuffix) {
+    const sameSuffix = vehicles.filter((v) => norm(v.LicensePlateSuffix) === fNormSuffix)
+    const survivors = sameSuffix.filter((v) => {
+      const cPrefix = norm(v.LicensePlatePrefix)
+      if (!cPrefix) return false
+      if (/[ก-๙]/.test(cPrefix[0])) { if (!fNormPrefix || cPrefix[0] !== fNormPrefix[0]) return false }
+      return cPrefix === fNormPrefix || isSubsequence(cPrefix, fNormPrefix)
+    })
+    if (survivors.length === 1) return survivors[0].VehicleId
+  }
+
+  const fC1 = compact(prefix + suffix)
+  const fC2 = compact(raw)
+  const hits: VehicleForResolver[] = []
+  const seen = new Set<string>()
+  for (const v of vehicles) {
+    const vCPlate = compact(v.LicensePlatePrefix + v.LicensePlateSuffix)
+    const vCModel = compact(v.Model)
+    let match = false
+    if (fC1 && (vCPlate === fC1 || vCModel === fC1)) match = true
+    if (!match && fC2 && fC2 !== fC1 && (vCPlate === fC2 || vCModel === fC2)) match = true
+    if (!match && fC1 && vCPlate.length >= 4 && fC1.startsWith(vCPlate)) match = true
+    if (!match && fC1 && vCModel.length >= 4 && fC1.startsWith(vCModel)) match = true
+    if (match && !seen.has(v.VehicleId)) { seen.add(v.VehicleId); hits.push(v) }
+  }
+  if (hits.length === 0) return null
+  if (hits.length === 1) return hits[0].VehicleId
+  const plateKeyed = hits.filter((v) => v.LicensePlatePrefix || v.LicensePlateSuffix)
+  if (plateKeyed.length === 1) return plateKeyed[0].VehicleId
+  hits.sort((a, b) => a.CreatedAt.getTime() - b.CreatedAt.getTime())
+  return hits[0].VehicleId
+}
+
 interface SubBatches {
   ins: Prisma.InsurancePolicyVehicleCreateManyInput[]
   comp: Prisma.CompulsoryMotorInsuranceVehicleCreateManyInput[]
@@ -312,7 +365,7 @@ function collectSubRecords(vehicleId: string, row: any[], colMap: Record<string,
 
 // Upsert: update the existing vehicle (matched by plate, ignoring province) or
 // create a new one, then attach any insurance/tax records found in the row.
-async function importVehicles(tenantId: string, username: string | undefined, rows: any[][], colMap: Record<string, number>): Promise<Omit<SheetResult, 'sheet' | 'type'>> {
+async function importVehicles(tenantId: string, username: string | undefined, rows: any[][], colMap: Record<string, number>, matchFallback?: boolean): Promise<Omit<SheetResult, 'sheet' | 'type'>> {
   let created = 0, updated = 0, sub = 0, skipped = 0
   const errors: string[] = []
 
@@ -322,7 +375,7 @@ async function importVehicles(tenantId: string, username: string | undefined, ro
     loadRefMap('vehicleDriver', 'VehicleDriverId', tenantId),
     loadRefMap('vehicleStatus', 'VehicleStatusId', tenantId),
   ])
-  const existing = await db.vehicle.findMany({ where: { TenantId: tenantId }, select: { VehicleId: true, LicensePlatePrefix: true, LicensePlateSuffix: true, Model: true } })
+  const existing = await db.vehicle.findMany({ where: { TenantId: tenantId }, select: { VehicleId: true, LicensePlatePrefix: true, LicensePlateSuffix: true, Model: true, CreatedAt: true } })
   const vmap = new Map<string, string>()
   const modelIdx: { toks: string[]; id: string }[] = []
   for (const v of existing) {
@@ -354,7 +407,8 @@ async function importVehicles(tenantId: string, username: string | undefined, ro
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]
     try {
-      let prefix = str(cell(row, colMap, 'license'))
+      const rawLic = str(cell(row, colMap, 'license'))
+      let prefix = rawLic
       let suffix = str(cell(row, colMap, 'licenseSuffix'))
       let province = str(cell(row, colMap, 'province'))
       if (!suffix) { const p = parseLicense(prefix); prefix = p.prefix; suffix = p.suffix; if (!province) province = p.province }
@@ -375,6 +429,10 @@ async function importVehicles(tenantId: string, username: string | undefined, ro
       let existingId = vmap.get(key)
       let fuzzy = false
       if (!existingId && isModelKey) { const m = matchModelId(modelIdx, model); if (m) { existingId = m; fuzzy = true } }
+      if (!existingId && !isModelKey && matchFallback) {
+        const matched = fuzzyFindVehicle(existing, prefix, suffix, rawLic)
+        if (matched) existingId = matched
+      }
 
       if (existingId) {
         const upd: Prisma.VehicleUpdateInput = { UpdatedByUsername: username ?? 'import' }
@@ -797,6 +855,133 @@ function importIncome(tenantId: string, username: string | undefined, sheetName:
   )
 }
 
+// ---------- installment-matrix importer ----------
+interface MatrixGroupCol { date: number; inst: number; invDate: number | null; invNo: number }
+interface InstallmentMatrixLayout {
+  bandRow: number; groupRow: number
+  seqCol: number | null; modelCol: number; licenseCol: number; amountCol: number; noteCol: number | null
+  monthGroups: MatrixGroupCol[]
+}
+
+// Structural detector for wide month-matrix installment sheets.
+// Looks for a sub-header row with >=3 adjacent groups of (วันที่ชำระ, งวด, เลขที่ใบกำกับ within 2 cols)
+// AND a band row above with ทะเบียน + รายการทรัพย์สิน + ผ่อน-prefixed column.
+// Returns layout or null. Runs before the AI call so unrecognised shapes don't waste an AI call.
+function detectInstallmentMatrix(matrix: any[][]): InstallmentMatrixLayout | null {
+  const limit = Math.min(matrix.length, 12)
+  for (let r = 1; r < limit; r++) {
+    const row = matrix[r] ?? []
+    const groups: MatrixGroupCol[] = []
+    for (let c = 0; c < row.length - 2; c++) {
+      if (norm(row[c]) !== 'วันที่ชำระ') continue
+      if (norm(row[c + 1]) !== 'งวด') continue
+      let invNoCol: number | null = null, invDateCol: number | null = null
+      for (let offset = 1; offset <= 2; offset++) {
+        const n = norm(row[c + 1 + offset] ?? '')
+        if (n.includes('เลขที่ใบกำกับ') && !n.includes('ภาษี')) { invNoCol = c + 1 + offset; break }
+        if (n.includes('วันที่ใบกำกับ')) invDateCol = c + 1 + offset
+      }
+      if (invNoCol === null) continue
+      groups.push({ date: c, inst: c + 1, invDate: invDateCol, invNo: invNoCol })
+    }
+    if (groups.length < 3) continue
+    const band = matrix[r - 1] ?? []
+    let licenseCol = -1, modelCol = -1, amountCol = -1, seqCol: number | null = null, noteCol: number | null = null
+    for (let c = 0; c < band.length; c++) {
+      const n = norm(band[c])
+      if (n === 'ทะเบียน' || n === 'ป้ายทะเบียน') licenseCol = c
+      else if (n === 'รายการทรัพย์สิน' || n === 'ชื่อรถ') modelCol = c
+      else if (n.startsWith('ผ่อน')) amountCol = c
+      else if (n === 'ลำดับ' || n === 'ลำดับที่') seqCol = c
+      else if (n === 'หมายเหตุ') noteCol = c
+    }
+    if (licenseCol < 0 || modelCol < 0 || amountCol < 0) continue
+    return { bandRow: r - 1, groupRow: r, seqCol, modelCol, licenseCol, amountCol, noteCol, monthGroups: groups }
+  }
+  return null
+}
+
+async function importInstallmentMatrix(tenantId: string, username: string | undefined, sheetName: string, matrix: any[][]): Promise<CatResult> {
+  const layout = detectInstallmentMatrix(matrix)
+  if (!layout) return { created: 0, updated: 0, sub: 0, skipped: 0, errors: ['detector mismatch'] }
+
+  const allVehicles = await db.vehicle.findMany({
+    where: { TenantId: tenantId },
+    select: { VehicleId: true, LicensePlatePrefix: true, LicensePlateSuffix: true, Model: true, CreatedAt: true },
+  })
+
+  const existingInst = await db.installmentsVehicle.findMany({
+    where: { Vehicle: { TenantId: tenantId } },
+    select: { VehicleId: true, InstallmentNumber: true },
+  })
+  const existSet = new Set<string>(existingInst.map((i) => `${i.VehicleId}|${i.InstallmentNumber}`))
+  const seenSet = new Set<string>()
+
+  const toCreate: Prisma.InstallmentsVehicleCreateManyInput[] = []
+  let skipped = 0
+  const errors: string[] = []
+  const dataRows = matrix.slice(layout.groupRow + 1)
+
+  for (let i = 0; i < dataRows.length; i++) {
+    const row = dataRows[i]
+    const rawLicense = str(row[layout.licenseCol] ?? '')
+    if (!rawLicense || norm(rawLicense) === 'ทะเบียน') { skipped++; continue }
+
+    // Collect paid month-groups where วันที่ชำระ parses as a date
+    const payments: { date: Date; instNum: number; instRaw: string; invNo: string }[] = []
+    for (const grp of layout.monthGroups) {
+      const d = dateOrNull(row[grp.date])
+      if (!d) continue
+      const instRaw = str(row[grp.inst])
+      const m = instRaw.match(/งวดที่\s*(\d+)/)
+      if (!m) { if (instRaw) errors.push(`แถว ${i + 1}: งวดที่ parse fail: "${instRaw}"`); continue }
+      payments.push({ date: d, instNum: parseInt(m[1], 10), instRaw, invNo: str(row[grp.invNo]) })
+    }
+    if (payments.length === 0) { skipped++; continue }
+
+    // Lazy-resolve vehicle (create only if >= 1 payment parsed)
+    const { prefix, suffix } = parseLicense(rawLicense)
+    const vKey = plateKey(prefix, suffix, '')
+    let vid: string | null = (prefix || suffix) ? (allVehicles.find((v) => plateKey(v.LicensePlatePrefix, v.LicensePlateSuffix, v.Model) === vKey)?.VehicleId ?? null) : null
+    if (!vid) vid = fuzzyFindVehicle(allVehicles, prefix, suffix, rawLicense)
+    if (!vid) {
+      const model = str(row[layout.modelCol] ?? '')
+      const newV = await db.vehicle.create({
+        data: {
+          TenantId: tenantId, Status: 'active',
+          LicensePlatePrefix: prefix, LicensePlateSuffix: suffix, LicensePlateProvince: '',
+          VehicleTypeId: null, VehicleCharacteristic: '', VehicleBrandId: null,
+          Model: model, Generation: '', Color: '', ChassisNumber: '', EngineNumber: '', EngineBrand: '',
+          TankSize: 0, FuelConsumption: 0, CylinderCount: 0, Cylinder: 0,
+          VehicleSize: '', CargoSize: '', GasSerialNumber: '',
+          VehicleWeight: 0, CargoWeight: 0, WheelCount: 0, SeatCount: 0,
+          RegistrationDate: null, Age: '', Ownership: '',
+          VehicleDriverId: null, VehicleStatusId: null, InstallmentAmount: null, Note: null,
+          CreatedByUsername: username ?? 'import', UpdatedByUsername: username ?? 'import',
+        }, select: { VehicleId: true, CreatedAt: true },
+      })
+      vid = newV.VehicleId
+      allVehicles.push({ VehicleId: vid, LicensePlatePrefix: prefix, LicensePlateSuffix: suffix, Model: model, CreatedAt: newV.CreatedAt })
+    }
+
+    const amount = decOrZero(row[layout.amountCol] ?? '')
+    for (const p of payments) {
+      const k = `${vid}|${p.instNum}`
+      if (existSet.has(k) || seenSet.has(k)) { skipped++; continue }
+      seenSet.add(k)
+      toCreate.push({
+        VehicleId: vid, Status: 'active',
+        InstallmentNumber: p.instNum, DueDate: p.date, DatePay: p.date, Amount: amount,
+        PaymentEvidence: p.invNo ? `${p.instRaw} ใบกำกับ ${p.invNo}` : p.instRaw,
+        CreatedByUsername: username ?? 'import',
+      })
+    }
+  }
+
+  if (toCreate.length) await db.installmentsVehicle.createMany({ data: toCreate })
+  return { created: toCreate.length, updated: 0, sub: 0, skipped, errors }
+}
+
 const CATEGORY_IMPORTERS: Record<string, (t: string, u: string | undefined, sheet: string, r: any[][], c: Record<string, number>) => Promise<CatResult>> = {
   repair: importRepair, accident: importAccident, fuel: importFuel, oil: importOil, installment: importInstallment, income: importIncome,
 }
@@ -817,6 +1002,11 @@ export function classify(colMap: Record<string, number>): SheetType {
 // Resolve a sheet's mapping: ask Gemini first; fall back to the heuristic if the
 // AI is unavailable or can't classify it. Returns type/headerRow/colMap + how mapped.
 async function resolveMapping(sheetName: string, matrix: any[][]): Promise<{ type: SheetResult['type']; headerRow: number; colMap: Record<string, number>; via: string }> {
+  // B1: structural detector runs before the AI call — avoids wasting an AI call on
+  // the wide month-matrix layout that no general header heuristic can classify.
+  const matrixLayout = detectInstallmentMatrix(matrix)
+  if (matrixLayout) return { type: 'installment-matrix', headerRow: matrixLayout.groupRow, colMap: {}, via: 'heuristic' }
+
   const ai = await aiMapSheet(sheetName, matrix)
   if (ai && ai.type !== 'unknown' && Object.keys(ai.columns).length >= 1) {
     // Merge AI + heuristic mappings. The heuristic wins on conflicts: it matches
@@ -837,11 +1027,28 @@ async function resolveMapping(sheetName: string, matrix: any[][]): Promise<{ typ
     // a real oil sheet always carries วันที่เปลี่ยนน้ำมัน/ครบกำหนดเปลี่ยน.
     const aiMisread = ai.type === 'income' || ai.type === 'vehicles'
       || (ai.type === 'oil' && !('oilDate' in (det?.colMap ?? {})) && !('oilDueDate' in (det?.colMap ?? {})))
-    const type = hType === 'repair' && aiMisread ? 'repair' : ai.type
+    let type: SheetResult['type'] = hType === 'repair' && aiMisread ? 'repair' : ai.type
+
+    // A2: force 'vehicles' when heuristic says vehicles AND insurance/tax cols present AND
+    // AI returned a different type. Guards against AI misclassifying insurance sheets.
+    // Named negative: MA 'SK140' has taxEnd but hType='repair' — conjoin hType==='vehicles' prevents it.
+    const hasInsuranceCols = det && ['insuranceEnd', 'compulsoryEnd', 'taxEnd'].some((k) => k in det.colMap)
+    if (hType === 'vehicles' && hasInsuranceCols && ai.type !== 'vehicles') type = 'vehicles'
+
+    // A3: if A2 forced vehicles, strip AI-supplied 'model' mapping unless heuristic also found it,
+    // to prevent AI mapping 'ลักษณะ' → model which would corrupt Model on matched vehicles.
+    let mergedColMap: Record<string, number> = { ...ai.columns, ...(det?.colMap ?? {}) }
+    if (hType === 'vehicles' && hasInsuranceCols && ai.type !== 'vehicles') {
+      if (det && !('model' in det.colMap) && 'model' in ai.columns) {
+        const { model: _m, ...rest } = mergedColMap
+        mergedColMap = rest
+      }
+    }
+
     return {
       type,
       headerRow: det ? det.headerRow : ai.headerRow,
-      colMap: { ...ai.columns, ...(det?.colMap ?? {}) },
+      colMap: mergedColMap,
       via: 'ai',
     }
   }
@@ -923,9 +1130,16 @@ export async function importWorkbook(tenantId: string, username: string | undefi
       const sheetHeaderRow = detectHeader(matrix)?.headerRow ?? m.headerRow
       const dataRows = matrix.slice(sheetHeaderRow + 1)
       let r: CatResult
-      if (m.type === 'vehicles') r = await importVehicles(tenantId, username, dataRows, m.colMap)
-      else if (m.type === 'jobs') r = await importJobs(tenantId, username, dataRows, m.colMap)
-      else r = await CATEGORY_IMPORTERS[m.type](tenantId, username, name, dataRows, m.colMap)
+      if (m.type === 'vehicles') {
+        const matchFallback = ['insuranceEnd', 'compulsoryEnd', 'taxEnd'].some((k) => k in m.colMap)
+        r = await importVehicles(tenantId, username, dataRows, m.colMap, matchFallback)
+      } else if (m.type === 'jobs') {
+        r = await importJobs(tenantId, username, dataRows, m.colMap)
+      } else if (m.type === 'installment-matrix') {
+        r = await importInstallmentMatrix(tenantId, username, name, matrix)
+      } else {
+        r = await CATEGORY_IMPORTERS[m.type](tenantId, username, name, dataRows, m.colMap)
+      }
       results.push({ sheet: name, type: m.type, ...r })
     } catch (e: any) {
       results.push({ sheet: name, type: mappings[i]?.type ?? 'unknown', created: 0, updated: 0, sub: 0, skipped: 0, errors: [`import error: ${e?.message ?? 'unknown'}`] })

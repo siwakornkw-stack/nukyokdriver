@@ -259,7 +259,7 @@ export type InstallmentsVehicleData = {
   uuid: string;
   installmentNumber: number;
   dueDate: string;
-  textAlert: string;
+  paymentEvidence?: string;
 }
 
 export type CreateImageVehicleDTO = {

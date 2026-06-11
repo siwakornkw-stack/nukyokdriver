@@ -753,7 +753,7 @@ function VehicleInfoModal({
         const payload: CreateInstallmentsVehicleDTO = {
           installmentNumber: Number(updatedRow.InstallmentNumber),
           dueDate: dayjs(updatedRow.DueDate, 'DD/MM/YYYY').format('YYYY-MM-DD') ?? '',
-          textAlert: updatedRow.TextAlert ?? ''
+          paymentEvidence: updatedRow.PaymentEvidence ?? ''
         };
         const response = await addInstallmentsVehicle(payload, infoBillVehicle.id);
         if (!response.ok) {
@@ -769,7 +769,7 @@ function VehicleInfoModal({
         const payload: UpdateInstallmentsVehicleDTO = {
           installmentNumber: Number(updatedRow.InstallmentNumber),
           dueDate: dayjs(updatedRow.DueDate, 'DD/MM/YYYY').format('YYYY-MM-DD') ?? '',
-          textAlert: updatedRow.TextAlert ?? ''
+          paymentEvidence: updatedRow.PaymentEvidence ?? ''
         };
         const response = await updateInstallmentsVehicle(payload, updatedRow.uuid);
         if (!response.ok) {
@@ -1145,7 +1145,7 @@ function VehicleInfoModal({
         id: index + 1,
         InstallmentNumber: item.installmentNumber.toString(),
         DueDate: dayjs(item.dueDate).format('DD/MM/YYYY'),
-        TextAlert: item.textAlert
+        PaymentEvidence: item.paymentEvidence ?? ''
       }));
       console.log('installmentsVehicleRows', installmentsVehicleRows);
       setRows(installmentsVehicleRows);
@@ -1753,7 +1753,7 @@ function VehicleInfoModal({
             </LocalizationProvider>
           )
         },
-        { field: 'TextAlert', headerName: 'ข้อความที่เตือน', minWidth: 60, flex: 1, headerAlign: 'center', align: 'left', editable: true }
+        { field: 'PaymentEvidence', headerName: 'หลักฐานการชำระ', minWidth: 60, flex: 1, headerAlign: 'center', align: 'left', editable: false }
       ]);
     } else if (value === 12) {
       void getIncomeVehicleData();
