@@ -51,6 +51,24 @@ export interface IncomeSummaryRow {
   status: string;
 }
 
+export interface ExpenseSummaryRow {
+  id: number;
+  vehicleId: string;
+  licensePlate: string;
+  vehicleType: string;
+  driverName: string;
+  fuelCost: number;
+  repairCost: number;
+  repairInsurancePay: number;
+  taxCost: number;
+  compulsoryCost: number;
+  insuranceCost: number;
+  installmentCost: number;
+  totalCost: number;
+  income: number;
+  profit: number;
+}
+
 interface SummaryEnvelope<T> {
   success: boolean;
   code: number;
@@ -95,4 +113,8 @@ export function getIncomeSummary(startDate: Date | null, endDate: Date | null): 
 
 export function getFuelDetail(startDate: Date | null, endDate: Date | null): Promise<WrapResponse<SummaryEnvelope<FuelDetailRow[]> | null>> {
   return fetchSummary<FuelDetailRow[]>('/summary/fuel-detail', startDate, endDate);
+}
+
+export function getExpenseSummary(startDate: Date | null, endDate: Date | null): Promise<WrapResponse<SummaryEnvelope<ExpenseSummaryRow[]> | null>> {
+  return fetchSummary<ExpenseSummaryRow[]>('/summary/expense', startDate, endDate);
 }

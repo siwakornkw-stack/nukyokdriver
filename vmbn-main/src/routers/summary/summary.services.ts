@@ -195,6 +195,120 @@ export async function getFuelDetailService(
   }
 }
 
+export interface ExpenseSummaryRow {
+  id: number
+  vehicleId: string
+  licensePlate: string
+  vehicleType: string
+  driverName: string
+  fuelCost: number
+  repairCost: number
+  repairInsurancePay: number
+  taxCost: number
+  compulsoryCost: number
+  insuranceCost: number
+  installmentCost: number
+  totalCost: number
+  income: number
+  profit: number
+}
+
+// แต่ละตารางต้นทุนใช้ field วันที่ต่างกัน จึงสร้าง where แยกต่อ relation
+function dateRange(field: string, startDate?: string, endDate?: string): any {
+  const where: any = { Status: 'active' }
+  if (startDate && endDate) {
+    const end = new Date(endDate)
+    end.setHours(23, 59, 59, 999)
+    where[field] = { gte: new Date(startDate), lte: end }
+  }
+  return where
+}
+
+export async function getExpenseSummaryService(
+  tenantId: string,
+  startDate?: string,
+  endDate?: string
+): Promise<ExpenseSummaryRow[]> {
+  try {
+    const vehicles = await prisma.vehicle.findMany({
+      where: { TenantId: tenantId },
+      include: {
+        VehicleType: true,
+        VehicleDriver: true,
+        GasolineCost: { where: dateRange('DateTime', startDate, endDate) },
+        RepairVehicle: { where: dateRange('RepairDate', startDate, endDate) },
+        Tax: { where: dateRange('EndDate', startDate, endDate) },
+        CompulsoryMotorInsuranceVehicle: { where: dateRange('EndDate', startDate, endDate) },
+        InsurancePolicyVehicle: { where: dateRange('EndDate', startDate, endDate) },
+        InstallmentsVehicle: { where: dateRange('DueDate', startDate, endDate) },
+        IncomeVehicle: { where: dateRange('DateTime', startDate, endDate) }
+      }
+    })
+
+    const rows: ExpenseSummaryRow[] = vehicles.map((vehicle) => {
+      const fuelCost = vehicle.GasolineCost.reduce((s, x) => s + Number(x.Amount), 0)
+      const repairCost = vehicle.RepairVehicle.reduce((s, x) => s + Number(x.CompanyPay), 0)
+      const repairInsurancePay = vehicle.RepairVehicle.reduce((s, x) => s + Number(x.InsurancePay), 0)
+      const taxCost = vehicle.Tax.reduce((s, x) => s + Number(x.TotalPremium), 0)
+      const compulsoryCost = vehicle.CompulsoryMotorInsuranceVehicle.reduce((s, x) => s + Number(x.TotalPremium), 0)
+      const insuranceCost = vehicle.InsurancePolicyVehicle.reduce((s, x) => s + Number(x.TotalPremium), 0)
+      const installmentCost = vehicle.InstallmentsVehicle.reduce((s, x) => s + Number(x.Amount), 0)
+      const income = vehicle.IncomeVehicle.reduce((s, x) => s + Number(x.AmountReceive), 0)
+      const totalCost = fuelCost + repairCost + taxCost + compulsoryCost + insuranceCost + installmentCost
+
+      return {
+        id: vehicle.No,
+        vehicleId: vehicle.VehicleId,
+        licensePlate: [vehicle.LicensePlatePrefix, vehicle.LicensePlateSuffix, vehicle.LicensePlateProvince].filter(Boolean).join(' ').trim() || vehicle.Model || `รถ ${vehicle.No}`,
+        vehicleType: vehicle.VehicleType?.Name || 'ไม่ระบุ',
+        driverName: vehicle.VehicleDriver?.Name || 'ไม่ระบุ',
+        fuelCost,
+        repairCost,
+        repairInsurancePay,
+        taxCost,
+        compulsoryCost,
+        insuranceCost,
+        installmentCost,
+        totalCost,
+        income,
+        profit: income - totalCost
+      }
+    })
+
+    // รายได้ไม่ผูกรถ (VehicleId null) นับเป็นรายได้รวมด้วย แต่ไม่มีต้นทุน
+    const unlinked = await prisma.incomeVehicle.findMany({
+      where: { ...dateRange('DateTime', startDate, endDate), VehicleId: null, TenantId: tenantId }
+    })
+    const groups = new Map<string, number>()
+    for (const r of unlinked) {
+      const k = r.SourceLabel || 'ไม่ระบุ'
+      groups.set(k, (groups.get(k) || 0) + Number(r.AmountReceive))
+    }
+    const unlinkedRows: ExpenseSummaryRow[] = Array.from(groups.entries()).map(([label, income], i) => ({
+      id: 1000000 + i,
+      vehicleId: '',
+      licensePlate: label,
+      vehicleType: 'รายได้ไม่ผูกรถ',
+      driverName: '-',
+      fuelCost: 0,
+      repairCost: 0,
+      repairInsurancePay: 0,
+      taxCost: 0,
+      compulsoryCost: 0,
+      insuranceCost: 0,
+      installmentCost: 0,
+      totalCost: 0,
+      income,
+      profit: income
+    }))
+
+    return [...rows, ...unlinkedRows].sort((a, b) => b.totalCost - a.totalCost)
+  } catch (error) {
+    console.error('Error in getExpenseSummaryService:', error)
+    throw error
+  }
+}
+
 export async function getFuelSummaryService(
   tenantId: string,
   startDate?: string,

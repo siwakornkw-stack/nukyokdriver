@@ -22,4 +22,10 @@ router.get(
     SummaryController.getFuelDetail
 )
 
+router.get(
+    '/expense',
+    requireUser,
+    SummaryController.getExpenseSummary
+)
+
 export default router 
