@@ -19,10 +19,13 @@ import { DatePicker, LocalizationProvider, TimePicker, DateTimePicker } from '@m
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
 import 'dayjs/locale/th';
-import type { GridRenderEditCellParams } from '@mui/x-data-grid';
+import type { GridRenderEditCellParams, GridRenderCellParams } from '@mui/x-data-grid';
 import { addAccidentVehicle, addAttachFileVehicle, addCarTiresVehicle, addCompulsoryMotorInsuranceVehicle, addDrainTheOilVehicle, addGasolineCostVehicle, addImageVehicle, addIncomeVehicle, addInstallmentsVehicle, addInsurancePolicyVehicle, addRepairVehicle, addVehicleTax, getAccidentVehicle, getAttachFileVehicle, getCarTiresVehicle, getCompulsoryMotorInsuranceVehicle, getDrainTheOilVehicle, getGasolineCostVehicle, getImageVehicle, getIncomeVehicle, getInstallmentsVehicle, getInsurancePolicyVehicle, getOptionDriver, getOptionPaymentStatus, getRepairVehicle, getVehicleTax, importDataVehicleCSV, updateAccidentVehicle, updateAttachFileVehicle, updateCarTiresVehicle, updateCompulsoryMotorInsuranceVehicle, updateDrainTheOilVehicle, updateGasolineCostVehicle, updateIncomeVehicle, updateInstallmentsVehicle, updateInsurancePolicyVehicle, updateRepairVehicle, updateVehicleTax } from '../../../../services/vehicle.service';
 import { CustomToast } from '@/helpers/toast';
 import { getResponseData } from '../../../../types/utils';
+import { numberFormat } from '@/helpers/helper';
+import { getInstallmentStatus } from '@/helpers/installment';
+import { InstallmentStatusChip } from '@/components/dashboard/installment/InstallmentStatusChip';
 
 const urlImage = process.env.NEXT_PUBLIC_URL_IMAGE || '';
 
@@ -745,14 +748,24 @@ function VehicleInfoModal({
         CustomToast.error('Error', 'กรุณาระบุวันที่ครบ');
         return;
       }
-      if (updatedRow?.TextAlert?.trim() === '') {
-        CustomToast.error('Error', 'กรุณาระบุข้อความที่เตือน');
+      const installmentAmount =
+        updatedRow.Amount === undefined || updatedRow.Amount === null || `${updatedRow.Amount}`.trim() === ''
+          ? 0
+          : Number(updatedRow.Amount);
+      if (Number.isNaN(installmentAmount)) {
+        CustomToast.error('Error', 'จำนวนเงินไม่ถูกต้อง');
         return;
       }
+      // ตั้งวันที่จ่าย = mark as paid; เว้นว่าง = ยังไม่ชำระ
+      const installmentDatePay = updatedRow.DatePay
+        ? dayjs(updatedRow.DatePay, 'DD/MM/YYYY').format('YYYY-MM-DD')
+        : null;
       if (!updatedRow.uuid) {
         const payload: CreateInstallmentsVehicleDTO = {
           installmentNumber: Number(updatedRow.InstallmentNumber),
           dueDate: dayjs(updatedRow.DueDate, 'DD/MM/YYYY').format('YYYY-MM-DD') ?? '',
+          amount: installmentAmount,
+          datePay: installmentDatePay,
           paymentEvidence: updatedRow.PaymentEvidence ?? ''
         };
         const response = await addInstallmentsVehicle(payload, infoBillVehicle.id);
@@ -769,6 +782,8 @@ function VehicleInfoModal({
         const payload: UpdateInstallmentsVehicleDTO = {
           installmentNumber: Number(updatedRow.InstallmentNumber),
           dueDate: dayjs(updatedRow.DueDate, 'DD/MM/YYYY').format('YYYY-MM-DD') ?? '',
+          amount: installmentAmount,
+          datePay: installmentDatePay,
           paymentEvidence: updatedRow.PaymentEvidence ?? ''
         };
         const response = await updateInstallmentsVehicle(payload, updatedRow.uuid);
@@ -1145,6 +1160,8 @@ function VehicleInfoModal({
         id: index + 1,
         InstallmentNumber: item.installmentNumber.toString(),
         DueDate: dayjs(item.dueDate).format('DD/MM/YYYY'),
+        Amount: item.amount ?? 0,
+        DatePay: item.datePay ? dayjs(item.datePay).format('DD/MM/YYYY') : '',
         PaymentEvidence: item.paymentEvidence ?? ''
       }));
       console.log('installmentsVehicleRows', installmentsVehicleRows);
@@ -1748,6 +1765,44 @@ function VehicleInfoModal({
                     fullWidth: true,
                     sx: datePickerStyle
                   }
+                }}
+              />
+            </LocalizationProvider>
+          )
+        },
+        {
+          field: 'Amount', headerName: 'จำนวนเงิน', minWidth: 80, flex: 0.3, headerAlign: 'center', align: 'right', editable: true, type: 'number',
+          renderCell: (params: GridRenderCellParams) => numberFormat(params.value as number)
+        },
+        {
+          field: 'PaymentStatus', headerName: 'สถานะ', minWidth: 90, flex: 0.25, headerAlign: 'center', align: 'center', editable: false, sortable: false,
+          renderCell: (params: GridRenderCellParams) => {
+            const due = params.row.DueDate ? dayjs(params.row.DueDate as string, 'DD/MM/YYYY') : null;
+            const paid = params.row.DatePay ? dayjs(params.row.DatePay as string, 'DD/MM/YYYY') : null;
+            return <InstallmentStatusChip status={getInstallmentStatus(due, paid)} />;
+          }
+        },
+        {
+          field: 'DatePay', headerName: 'วันที่ชำระ', minWidth: 60, flex: 0.3, headerAlign: 'center', align: 'center', editable: true,
+          renderEditCell: (params: GridRenderEditCellParams) => (
+            <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="th">
+              <DatePicker
+                value={params.value ? dayjs(params.value as string, 'DD/MM/YYYY') : null}
+                onChange={(newValue) => {
+                  void params.api.setEditCellValue({
+                    id: params.id,
+                    field: params.field,
+                    value: newValue ? newValue.format('DD/MM/YYYY') : ''
+                  }, true);
+                }}
+                format="DD/MM/YYYY"
+                slotProps={{
+                  textField: {
+                    size: "small",
+                    fullWidth: true,
+                    sx: datePickerStyle
+                  },
+                  actionBar: { actions: ['clear', 'today'] }
                 }}
               />
             </LocalizationProvider>

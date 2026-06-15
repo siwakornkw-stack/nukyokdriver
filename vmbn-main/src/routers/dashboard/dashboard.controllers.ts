@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express'
 import { IGetUserAuthInfoRequest } from "../../typings/express"
 import { ParsedToken } from '../../typings/token'
-import { getDailyIncomeForWeek, getGasolineCostFromDateRange, getIncomeVehicleFromDateRange, getIncomeVehicleLastDay, getIncomeVehicleLastMonth, getIncomeVehicleLastWeek, getIncomeVehicleLastYear, getIncomeVehicleThisDay, getIncomeVehicleThisMonth, getIncomeVehicleThisWeek, getIncomeVehicleThisYear, getMonthlyIncomeForYear, getRepairVehicleFromDateRange, getWeeklyIncomeForMonth, getCostBreakdown, getFleetSummary } from './dashboard.services'
+import { getDailyIncomeForWeek, getGasolineCostFromDateRange, getIncomeVehicleFromDateRange, getIncomeVehicleLastDay, getIncomeVehicleLastMonth, getIncomeVehicleLastWeek, getIncomeVehicleLastYear, getIncomeVehicleThisDay, getIncomeVehicleThisMonth, getIncomeVehicleThisWeek, getIncomeVehicleThisYear, getMonthlyIncomeForYear, getRepairVehicleFromDateRange, getWeeklyIncomeForMonth, getCostBreakdown, getFleetSummary, getInstallmentsArService } from './dashboard.services'
 
 export async function getDashboardController(req: IGetUserAuthInfoRequest, res: Response, next: NextFunction) {
   try {
@@ -173,6 +173,26 @@ export async function getDashboardController(req: IGetUserAuthInfoRequest, res: 
   }
 }
 
+
+export async function getInstallmentsAr(req: IGetUserAuthInfoRequest, res: Response, next: NextFunction) {
+  try {
+    const parsedToken: ParsedToken | undefined = req.parsedToken
+    if (!parsedToken) throw new Error('Unauthorized')
+    const data = await getInstallmentsArService(parsedToken.tenantId)
+    res.json({
+      success: true,
+      code: 200,
+      message: 'success',
+      data
+    })
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      code: 500,
+      message: error.message
+    });
+  }
+}
 
 export async function getSummaryFromDateRange(req: IGetUserAuthInfoRequest, res: Response, next: NextFunction) {
   try {

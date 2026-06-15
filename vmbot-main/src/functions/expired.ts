@@ -2,11 +2,12 @@ import { db } from '../utils/db.server';
 
 /*Expired Date*/
 export async function getTaxExpiringIn7Days(TenantId: string) {
-  const today = new Date()
-  const in7Days = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 7)
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const in7Days = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 7, 23, 59, 59, 999)
 
   return await db.tax.findMany({
     where: {
+      Status: 'active',
       Vehicle: {
         TenantId: TenantId
       },
@@ -60,12 +61,42 @@ export async function getExpiredTax(TenantId: string) {
   })
 }
 
+// --- แจ้งล่วงหน้า: หมดอายุภายใน 8-30 วัน (ไม่ทับ window 7 วัน) สำหรับ ภาษี/พรบ/ประกัน ---
+function advanceWindow() {
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const in7 = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 7, 23, 59, 59, 999)
+  const in30 = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 30, 23, 59, 59, 999)
+  return { in7, in30 }
+}
+export async function getTaxExpiringAdvance(TenantId: string) {
+  const { in7, in30 } = advanceWindow()
+  return await db.tax.findMany({
+    where: { Status: 'active', Vehicle: { TenantId: TenantId }, EndDate: { gt: in7, lte: in30 } },
+    include: { Vehicle: true }
+  })
+}
+export async function getCompulsoryMotorInsuranceExpiringAdvance(TenantId: string) {
+  const { in7, in30 } = advanceWindow()
+  return await db.compulsoryMotorInsuranceVehicle.findMany({
+    where: { Status: 'active', Vehicle: { TenantId: TenantId }, EndDate: { gt: in7, lte: in30 } },
+    include: { Vehicle: true }
+  })
+}
+export async function getInsurancePolicyExpiringAdvance(TenantId: string) {
+  const { in7, in30 } = advanceWindow()
+  return await db.insurancePolicyVehicle.findMany({
+    where: { Status: 'active', Vehicle: { TenantId: TenantId }, EndDate: { gt: in7, lte: in30 } },
+    include: { Vehicle: true }
+  })
+}
+
 export async function getCompulsoryMotorInsuranceExpiringIn7Days(TenantId: string) {
-  const today = new Date()
-  const in7Days = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 7)
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const in7Days = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 7, 23, 59, 59, 999)
 
   return await db.compulsoryMotorInsuranceVehicle.findMany({
     where: {
+      Status: 'active',
       Vehicle: {
         TenantId: TenantId
       },
@@ -118,11 +149,12 @@ export async function getExpiredCompulsoryMotorInsurance(TenantId: string) {
 }
 
 export async function getInsurancePolicyExpiringIn7Days(TenantId: string) {
-  const today = new Date()
-  const in7Days = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 7)
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const in7Days = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 7, 23, 59, 59, 999)
 
   return await db.insurancePolicyVehicle.findMany({
     where: {
+      Status: 'active',
       Vehicle: {
         TenantId: TenantId
       },
@@ -280,6 +312,8 @@ export async function getInstallmentsVehicleExpiringIn7Days(TenantId: string) {
 
   return await db.installmentsVehicle.findMany({
     where: {
+      Status: 'active',
+      DatePay: null,
       Vehicle: {
         TenantId: TenantId
       },
@@ -297,6 +331,8 @@ export async function getInstallmentsVehicleExpiringNextWeek(TenantId: string) {
 
   return await db.installmentsVehicle.findMany({
     where: {
+      Status: 'active',
+      DatePay: null,
       Vehicle: {
         TenantId: TenantId
       },
@@ -307,12 +343,14 @@ export async function getInstallmentsVehicleExpiringNextWeek(TenantId: string) {
     }
   })
 }
-// ค่างวดแล้ว
+// ค่างวดแล้ว (เฉพาะที่ยังไม่ชำระ — DatePay = null)
 export async function getExpiredInstallmentsVehicle(TenantId: string) {
   const today = new Date()
 
   return await db.installmentsVehicle.findMany({
     where: {
+      Status: 'active',
+      DatePay: null,
       Vehicle: {
         TenantId: TenantId
       },

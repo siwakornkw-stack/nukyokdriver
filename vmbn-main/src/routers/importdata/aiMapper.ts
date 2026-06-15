@@ -138,11 +138,20 @@ function parseMapping(text: string | null): AiMapping | null {
 
 interface RawResult { ok: boolean; status: number; text: string | null }
 
+// External AI calls must not hang the request. AbortSignal.timeout aborts the whole
+// request lifecycle INCLUDING the response-body read (res.json()) — a plain
+// setTimeout+AbortController cleared after fetch() resolves would not cover a body
+// that hangs mid-stream. So a slow/unreachable provider fails fast (caller tries next).
+const FETCH_TIMEOUT_MS = 6000
+async function fetchT(url: string, init: RequestInit): Promise<Response> {
+  return fetch(url, { ...init, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
+}
+
 async function callGemini(p: Provider, key: string, prompt: string, opts: { json: boolean; maxTokens?: number }): Promise<RawResult> {
   const generationConfig: any = { temperature: 0 }
   if (opts.json) generationConfig.responseMimeType = 'application/json'
   if (opts.maxTokens) generationConfig.maxOutputTokens = opts.maxTokens
-  const res = await fetch(`${p.url}/${p.model}:generateContent?key=${key}`, {
+  const res = await fetchT(`${p.url}/${p.model}:generateContent?key=${key}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig }),
@@ -156,7 +165,7 @@ async function callOpenAI(p: Provider, key: string, prompt: string, opts: { json
   const body: any = { model: p.model, temperature: 0, messages: [{ role: 'user', content: prompt }] }
   if (opts.json) body.response_format = { type: 'json_object' }
   if (opts.maxTokens) body.max_tokens = opts.maxTokens
-  const res = await fetch(p.url, {
+  const res = await fetchT(p.url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
     body: JSON.stringify(body),
@@ -216,16 +225,17 @@ export async function checkAiHealth(): Promise<AiHealth> {
     return { status: 'no_key', message: 'ยังไม่ได้ตั้งค่า AI API key ตัวใดเลย', providers: [] }
   }
 
-  const providers: ProviderHealth[] = []
-  for (const p of configured) {
+  // Ping all providers in parallel so total time ≈ the slowest one (capped by the
+  // per-request timeout), not the sum of all. A hung provider no longer blocks.
+  const providers: ProviderHealth[] = await Promise.all(configured.map(async (p): Promise<ProviderHealth> => {
     const key = process.env[p.envKey] as string
     try {
       const r = await callProvider(p, key, 'ping', { json: false, maxTokens: 1 })
-      providers.push({ name: p.name, status: r.ok ? 'ok' : mapHttpToStatus(r.status), httpCode: r.ok ? 200 : r.status })
+      return { name: p.name, status: r.ok ? 'ok' : mapHttpToStatus(r.status), httpCode: r.ok ? 200 : r.status }
     } catch {
-      providers.push({ name: p.name, status: 'error' })
+      return { name: p.name, status: 'error' }
     }
-  }
+  }))
 
   const okNames = providers.filter((p) => p.status === 'ok').map((p) => p.name)
   if (okNames.length > 0) {

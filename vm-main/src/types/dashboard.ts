@@ -70,6 +70,33 @@ export type FleetSummary = {
   expiringInsurance: number;
 }
 
+export type InstallmentArResponse = {
+  code: number;
+  message: string;
+  data: InstallmentArSummary;
+}
+
+export type InstallmentArItem = {
+  uuid: string;
+  vehicleId: string;
+  vehicleNo: number | null;
+  licensePlate: string;
+  installmentNumber: number;
+  dueDate: string;
+  amount: number;
+  status: 'due' | 'overdue';
+  daysOverdue: number;
+}
+
+export type InstallmentArSummary = {
+  dueThisWeek: { count: number; amount: number };
+  overdue: { count: number; amount: number };
+  paidThisMonth: { count: number; amount: number };
+  collectionRate: number | null;
+  aging: { notYetDue: number; d1_30: number; d31_60: number; d61_90: number; d90plus: number };
+  items: InstallmentArItem[];
+}
+
 export type SummaryResponse = {
   code: number;
   message: string;

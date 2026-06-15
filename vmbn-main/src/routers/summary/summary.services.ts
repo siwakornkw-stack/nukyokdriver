@@ -244,7 +244,9 @@ export async function getExpenseSummaryService(
         Tax: { where: dateRange('EndDate', startDate, endDate) },
         CompulsoryMotorInsuranceVehicle: { where: dateRange('EndDate', startDate, endDate) },
         InsurancePolicyVehicle: { where: dateRange('EndDate', startDate, endDate) },
-        InstallmentsVehicle: { where: dateRange('DueDate', startDate, endDate) },
+        // ต้นทุนค่างวด = เฉพาะงวดที่จ่ายจริง (DatePay) — งวดค้างในอนาคต (DatePay=null) ที่
+        // generate ไว้สำหรับ AR ต้องไม่ถูกนับเป็นต้นทุน (รวมกรณี "ทั้งหมด" ที่ไม่มีช่วงวันที่)
+        InstallmentsVehicle: { where: (startDate && endDate) ? dateRange('DatePay', startDate, endDate) : { Status: 'active', DatePay: { not: null } } },
         IncomeVehicle: { where: dateRange('DateTime', startDate, endDate) }
       }
     })

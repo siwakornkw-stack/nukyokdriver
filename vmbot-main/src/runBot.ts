@@ -7,6 +7,9 @@ import {
   getInsurancePolicyExpiringIn7Days,
   getRepairVehicleExpiringIn7Days,
   getTaxExpiringIn7Days,
+  getTaxExpiringAdvance,
+  getCompulsoryMotorInsuranceExpiringAdvance,
+  getInsurancePolicyExpiringAdvance,
 } from './functions/expired';
 
 function formatDate(date: Date): string {
@@ -202,6 +205,42 @@ export async function runBot(): Promise<void> {
             });
           });
         }
+      }
+
+      // รอบที่ 2: แจ้งล่วงหน้า ภาษี/พรบ/ประกัน ที่จะหมดภายใน 8-30 วัน
+      // ส่งสัปดาห์ละครั้ง (วันจันทร์) เพื่อไม่ให้สแปมรายวันตลอด ~23 วันของช่วง advance
+      if (new Date().getDay() === 1) {
+      const [taxAdvance, cmAdvance, insAdvance] = await Promise.all([
+        getTaxExpiringAdvance(tenantId),
+        getCompulsoryMotorInsuranceExpiringAdvance(tenantId),
+        getInsurancePolicyExpiringAdvance(tenantId),
+      ]);
+      const advance = new Map<string, { VehicleNo: string; Tax: string | null; CmInsurance: string | null; InsurancePolicy: string | null }>();
+      const setAdvance = (vid: string, no: string, field: 'Tax' | 'CmInsurance' | 'InsurancePolicy', endDate: Date) => {
+        if (!advance.has(vid)) advance.set(vid, { VehicleNo: no, Tax: null, CmInsurance: null, InsurancePolicy: null });
+        advance.get(vid)![field] = formatDate(endDate);
+      };
+      taxAdvance.forEach(x => setAdvance(x.Vehicle.VehicleId, `${x.Vehicle.No}`, 'Tax', x.EndDate));
+      cmAdvance.forEach(x => setAdvance(x.Vehicle.VehicleId, `${x.Vehicle.No}`, 'CmInsurance', x.EndDate));
+      insAdvance.forEach(x => setAdvance(x.Vehicle.VehicleId, `${x.Vehicle.No}`, 'InsurancePolicy', x.EndDate));
+
+      const advanceList = Array.from(advance.values());
+      if (advanceList.length > 0 && tenant.LineChannelAccessToken !== null) {
+        const customers = await getAllCustomerTenant(tenantId);
+        customers.forEach(customer => {
+          advanceList.forEach(vehicle => {
+            let message = "⚠️ แจ้งล่วงหน้า (หมดอายุภายใน 30 วัน)\n";
+            message += `Vehicle-${vehicle.VehicleNo.toString().padStart(5, '0')}\n`;
+            if (vehicle.Tax) message += `ภาษีรถยนต์: หมดอายุ ${vehicle.Tax}\n`;
+            if (vehicle.CmInsurance) message += `พรบ: หมดอายุ ${vehicle.CmInsurance}\n`;
+            if (vehicle.InsurancePolicy) message += `กรมธรรม์: หมดอายุ ${vehicle.InsurancePolicy}\n`;
+            if (customer.LineUserId) {
+              console.log(message);
+              sendLineMessage(tenant.LineChannelAccessToken!, customer.LineUserId, message);
+            }
+          });
+        });
+      }
       }
     }
   } catch (error: any) {

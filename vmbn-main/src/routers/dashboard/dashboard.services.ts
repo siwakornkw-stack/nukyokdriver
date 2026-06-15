@@ -438,7 +438,9 @@ export async function getCostBreakdown(tenantId: string, start: Date, end: Date)
     db.tax.findMany({ where: { Status: 'active', ...ofTenant, EndDate: { gte: start, lte: end } } }),
     db.compulsoryMotorInsuranceVehicle.findMany({ where: { Status: 'active', ...ofTenant, EndDate: { gte: start, lte: end } } }),
     db.insurancePolicyVehicle.findMany({ where: { Status: 'active', ...ofTenant, EndDate: { gte: start, lte: end } } }),
-    db.installmentsVehicle.findMany({ where: { Status: 'active', ...ofTenant, DueDate: { gte: start, lte: end } } }),
+    // ต้นทุนค่างวด = เฉพาะงวดที่จ่ายจริงในช่วงเวลา (DatePay) — งวดค้างในอนาคต (DatePay=null)
+    // ที่ generate ไว้สำหรับ AR ต้องไม่ถูกนับเป็นต้นทุน. DatePay:{gte,lte} ตัด null อัตโนมัติ.
+    db.installmentsVehicle.findMany({ where: { Status: 'active', ...ofTenant, DatePay: { gte: start, lte: end } } }),
   ])
   const fuel = gas.reduce((s, x) => s + x.Amount.toNumber(), 0)
   const repairTotal = repair.reduce((s, x) => s + x.CompanyPay.toNumber(), 0)
@@ -483,4 +485,105 @@ export async function getFleetSummary(tenantId: string): Promise<FleetSummary> {
   }
   const byType = Array.from(typeMap.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count)
   return { total: vehicles.length, byType, expiringTax, expiringCompulsory, expiringInsurance }
+}
+
+// สรุปสถานะค่างวด (AR) ของทั้งกองรถ: ครบกำหนดสัปดาห์นี้ / เกินกำหนด / รับชำระเดือนนี้ /
+// อัตราเก็บเงินของเดือน / aging ของยอดค้าง + รายการที่ยังไม่ชำระ (due + overdue)
+// สถานะการชำระเป็นค่า derived จาก DueDate + DatePay (DB.Status เป็นแค่ flag soft-delete)
+export interface InstallmentArItem {
+  uuid: string
+  vehicleId: string
+  vehicleNo: number | null
+  licensePlate: string
+  installmentNumber: number
+  dueDate: Date
+  amount: number
+  status: 'due' | 'overdue'
+  daysOverdue: number
+}
+
+export interface InstallmentArSummary {
+  dueThisWeek: { count: number; amount: number }
+  overdue: { count: number; amount: number }
+  paidThisMonth: { count: number; amount: number }
+  collectionRate: number | null
+  aging: { notYetDue: number; d1_30: number; d31_60: number; d61_90: number; d90plus: number }
+  items: InstallmentArItem[]
+}
+
+export async function getInstallmentsArService(tenantId: string): Promise<InstallmentArSummary> {
+  const now = new Date()
+  const today = new Date(now); today.setHours(0, 0, 0, 0)
+  const endOfWeek = new Date(now); endOfWeek.setDate(now.getDate() + (6 - now.getDay())); endOfWeek.setHours(23, 59, 59, 999)
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
+  const dayMs = 24 * 60 * 60 * 1000
+
+  const installments = await db.installmentsVehicle.findMany({
+    where: { Status: 'active', Vehicle: { TenantId: tenantId } },
+    include: { Vehicle: true },
+    orderBy: { DueDate: 'asc' },
+  })
+
+  const plate = (v: { LicensePlatePrefix: string; LicensePlateSuffix: string; LicensePlateProvince: string } | null): string =>
+    v ? `${v.LicensePlatePrefix}${v.LicensePlateSuffix} ${v.LicensePlateProvince}`.trim() : ''
+
+  const dueThisWeek = { count: 0, amount: 0 }
+  const overdue = { count: 0, amount: 0 }
+  const paidThisMonth = { count: 0, amount: 0 }
+  let dueThisMonthAmount = 0
+  let dueThisMonthPaidAmount = 0
+  const aging = { notYetDue: 0, d1_30: 0, d31_60: 0, d61_90: 0, d90plus: 0 }
+  const items: InstallmentArItem[] = []
+
+  for (const inst of installments) {
+    const amount = inst.Amount.toNumber()
+    const due = inst.DueDate
+    const paid = inst.DatePay != null
+
+    // ตัวหารของ collection rate = ยอดที่ครบกำหนดในเดือนนี้ (นับทั้งจ่ายแล้ว/ยังไม่จ่าย)
+    if (due >= startOfMonth && due <= endOfMonth) {
+      dueThisMonthAmount += amount
+      if (paid) dueThisMonthPaidAmount += amount
+    }
+
+    if (paid) {
+      const datePay = inst.DatePay as Date
+      if (datePay >= startOfMonth && datePay <= endOfMonth) {
+        paidThisMonth.count++
+        paidThisMonth.amount += amount
+      }
+      continue
+    }
+
+    // ยังไม่ชำระ
+    if (due < today) {
+      overdue.count++
+      overdue.amount += amount
+      const days = Math.floor((today.getTime() - due.getTime()) / dayMs)
+      if (days <= 30) aging.d1_30 += amount
+      else if (days <= 60) aging.d31_60 += amount
+      else if (days <= 90) aging.d61_90 += amount
+      else aging.d90plus += amount
+      items.push({ uuid: inst.InstallmentsVehicleId, vehicleId: inst.VehicleId, vehicleNo: inst.Vehicle?.No ?? null, licensePlate: plate(inst.Vehicle), installmentNumber: inst.InstallmentNumber, dueDate: due, amount, status: 'overdue', daysOverdue: days })
+    } else {
+      aging.notYetDue += amount
+      if (due <= endOfWeek) {
+        dueThisWeek.count++
+        dueThisWeek.amount += amount
+      }
+      items.push({ uuid: inst.InstallmentsVehicleId, vehicleId: inst.VehicleId, vehicleNo: inst.Vehicle?.No ?? null, licensePlate: plate(inst.Vehicle), installmentNumber: inst.InstallmentNumber, dueDate: due, amount, status: 'due', daysOverdue: 0 })
+    }
+  }
+
+  const collectionRate = dueThisMonthAmount === 0 ? null : (dueThisMonthPaidAmount / dueThisMonthAmount) * 100
+
+  // เกินกำหนดก่อน (เร่งสุด เรียงค้างนานสุดขึ้นก่อน) แล้วตามด้วยใกล้ครบกำหนด
+  items.sort((a, b) => {
+    if (a.status !== b.status) return a.status === 'overdue' ? -1 : 1
+    if (a.status === 'overdue') return b.daysOverdue - a.daysOverdue
+    return a.dueDate.getTime() - b.dueDate.getTime()
+  })
+
+  return { dueThisWeek, overdue, paidThisMonth, collectionRate, aging, items }
 }

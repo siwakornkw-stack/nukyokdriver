@@ -259,8 +259,14 @@ export type InstallmentsVehicleData = {
   uuid: string;
   installmentNumber: number;
   dueDate: string;
+  amount?: number;
+  datePay?: string | null;
+  status?: string;
   paymentEvidence?: string;
 }
+
+// สถานะการชำระค่างวด เป็นค่า derived จาก dueDate + datePay (ไม่ได้เก็บใน DB)
+export type InstallmentPaymentStatus = 'paid' | 'due' | 'overdue';
 
 export type CreateImageVehicleDTO = {
   files: FileWithImageVehicle[];

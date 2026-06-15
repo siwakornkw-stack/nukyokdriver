@@ -18,4 +18,10 @@ router.post(
     DashboardController.getSummaryFromDateRange
 )
 
+router.get(
+    '/installments-ar',
+    requireUser,
+    DashboardController.getInstallmentsAr
+)
+
 export default router

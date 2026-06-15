@@ -2,7 +2,7 @@ import type { WrapResponse } from "../types/utils";
 import { wrapResponse } from "../types/utils";
 import { errorWrapper, getDomain } from "../helpers/helper";
 import Cookies from 'js-cookie';
-import type { DashboardResponse, SummaryResponse } from "@/types/dashboard";
+import type { DashboardResponse, InstallmentArResponse, SummaryResponse } from "@/types/dashboard";
 
 const urlApi = process.env.NEXT_PUBLIC_URL_API ?? '';
 
@@ -28,6 +28,31 @@ export async function getDashboard(): Promise<WrapResponse<DashboardResponse | n
 		return result;
 	} catch (error: unknown) {
 		return wrapResponse({ status: 500, message: errorWrapper(error, 'getDashboard') });
+	}
+}
+
+export async function getInstallmentsAr(): Promise<WrapResponse<InstallmentArResponse | null>> {
+	try {
+		const accessToken = Cookies.get('access_token');
+		if (!accessToken)
+			return wrapResponse({ status: 401, message: 'Unauthorized' });
+		const domain = getDomain();
+		if (!domain)
+			return wrapResponse({ status: 401, message: 'Unauthorized' });
+
+		const response = await fetch(`${urlApi}/dashboard/installments-ar`, {
+			method: 'GET',
+			headers: {
+				'Content-Type': 'application/json',
+				'x-domain': domain,
+				'Authorization': `Bearer ${accessToken}`
+			}
+		});
+		const result = await wrapResponse<InstallmentArResponse>(response);
+
+		return result;
+	} catch (error: unknown) {
+		return wrapResponse({ status: 500, message: errorWrapper(error, 'getInstallmentsAr') });
 	}
 }
 

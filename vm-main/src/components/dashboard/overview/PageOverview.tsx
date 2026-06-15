@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import Grid from '@mui/material/Unstable_Grid2'
 import { Budget } from '@/components/dashboard/overview/budget';
@@ -15,12 +15,16 @@ import { Traffic } from '@/components/dashboard/overview/traffic';
 import { CostBreakdownCard } from '@/components/dashboard/overview/cost-breakdown';
 import { FleetSummaryCard } from '@/components/dashboard/overview/fleet-summary';
 import { Income } from '@/components/dashboard/overview/income';
-import { getDashboard } from '../../../../services/dashboard.service';
-import type { DashboardResponse } from '@/types/dashboard';
+import { getDashboard, getInstallmentsAr } from '../../../../services/dashboard.service';
+import type { DashboardResponse, InstallmentArItem, InstallmentArResponse } from '@/types/dashboard';
+import { InstallmentArCards } from '@/components/dashboard/overview/installment-ar-cards';
+import { InstallmentAgingCard } from '@/components/dashboard/overview/installment-aging';
+import { InstallmentDueList } from '@/components/dashboard/overview/installment-due-list';
 import { getResponseData, type WrapResponse } from '../../../../types/utils';
 import { useEffect, useState } from 'react';
 import { numberFormat } from '@/helpers/helper';
-import { getVehicleAll } from '../../../../services/vehicle.service';
+import { getVehicleAll, updateInstallmentsVehicle } from '../../../../services/vehicle.service';
+import dayjs from 'dayjs';
 import { VehicleAllResponse } from '@/types/vehicle';
 import ShareSweetAlert from '@/components/ShareSweetAlert';
 import { SSENotificationData, useNotification } from '@/contexts/notification-context';
@@ -63,6 +67,36 @@ export default function PageOverview(): React.JSX.Element {
       staleTime: 10000,
       retry: 3
     });
+
+  const queryClient = useQueryClient();
+
+  const { data: arData, isLoading: isArLoading } = useQuery<WrapResponse<InstallmentArResponse | null>>({
+    queryKey: ['installments-ar'],
+    queryFn: getInstallmentsAr,
+    refetchInterval: 30000,
+    staleTime: 10000,
+    retry: 3
+  });
+
+  const arSummary = (arData as WrapResponse<InstallmentArResponse>)?.data?.data ?? undefined;
+
+  const handleMarkPaid = async (item: InstallmentArItem): Promise<void> => {
+    const res = await updateInstallmentsVehicle({
+      installmentNumber: item.installmentNumber,
+      // ใช้ส่วนวันที่ของ ISO ตรงๆ กัน timezone เลื่อน DueDate +/-1 วัน (dayjs parse เป็น local)
+      dueDate: String(item.dueDate).slice(0, 10),
+      amount: item.amount,
+      datePay: dayjs().format('YYYY-MM-DD'),
+      paymentEvidence: ''
+    }, item.uuid);
+    if (!res.ok) {
+      CustomToast.error('Error', 'บันทึกการชำระไม่สำเร็จ');
+      return;
+    }
+    CustomToast.success('Success', 'บันทึกการชำระเรียบร้อย');
+    await queryClient.invalidateQueries({ queryKey: ['installments-ar'] });
+    await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+  };
 
   async function openCheckLine(data: CheckLine) {
     try {
@@ -290,6 +324,15 @@ export default function PageOverview(): React.JSX.Element {
         <Grid lg={3} sm={6} xs={12}>
           <TasksProgress helpText="สัดส่วนรายได้เทียบเป้าหมาย" loading={isDashboardLoading} sx={{ height: '100%' }} value={timeRangeData?.incomePercentage ?? 0} />
         </Grid>
+
+        <InstallmentArCards summary={arSummary} loading={isArLoading} />
+        <Grid lg={8} md={12} xs={12}>
+          <InstallmentDueList items={arSummary?.items} loading={isArLoading} onMarkPaid={handleMarkPaid} sx={{ height: '100%' }} />
+        </Grid>
+        <Grid lg={4} md={12} xs={12}>
+          <InstallmentAgingCard aging={arSummary?.aging} loading={isArLoading} sx={{ height: '100%' }} />
+        </Grid>
+
         <Grid lg={8} xs={12}>
           <Sales
             chartSeries={timeRangeData?.graphData ?? []}

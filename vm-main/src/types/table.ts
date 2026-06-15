@@ -32,6 +32,8 @@ export interface TaxRow {
     TextAlert?: string;
     InstallmentNumber?: string;
     DueDate?: string;
+    DatePay?: string;
+    PaymentStatus?: string;
     PaymentEvidence?: string;
     Action?: string;
     editable?: boolean;

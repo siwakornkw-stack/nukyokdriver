@@ -21,6 +21,7 @@ export async function getAllCustomerTenant(TenantId: string) {
         where: {
             Status: 'active',
             TenantId: TenantId,
+            Role: 'admin',
             LinePinVerify: true
         },
         select: {
