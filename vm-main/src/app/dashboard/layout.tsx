@@ -10,6 +10,7 @@ import { MainNav } from '@/components/dashboard/layout/main-nav';
 import { SideNav } from '@/components/dashboard/layout/side-nav';
 import { ToastContainer } from 'react-toastify';
 import { ShareWrapper } from '@/contexts/share-context';
+import { GlobalBillVehicleModal } from '@/components/dashboard/layout/GlobalBillVehicleModal';
 import { NotificationWrapper } from '@/contexts/notification-context';
 import 'react-toastify/dist/ReactToastify.css';
 import "sweetalert2/dist/sweetalert2.min.css";
@@ -71,6 +72,7 @@ export default function Layout({ children }: LayoutProps): React.JSX.Element {
                 </Container>
               </main>
             </Box>
+            <GlobalBillVehicleModal />
           </ShareWrapper>
           <ToastContainer />
         </NotificationWrapper>

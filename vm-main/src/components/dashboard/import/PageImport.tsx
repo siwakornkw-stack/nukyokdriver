@@ -29,7 +29,7 @@ const AI_PROVIDER_LABEL: Record<AiStatusResponse['status'], string> = {
 
 const TYPE_LABEL: Record<string, string> = {
   vehicles: 'รถ', jobs: 'สั่งงานคนขับ', repair: 'ซ่อม', accident: 'อุบัติเหตุ',
-  fuel: 'ค่าน้ำมัน', oil: 'เปลี่ยนน้ำมัน', installment: 'ค่างวด', income: 'รายได้', unknown: 'ไม่รู้จัก',
+  fuel: 'ค่าน้ำมัน', oil: 'เปลี่ยนน้ำมัน', installment: 'ค่างวด', 'installment-matrix': 'ค่างวด(ตารางผ่อน)', income: 'รายได้', unknown: 'ไม่รู้จัก',
 };
 
 export default function PageImport(): React.JSX.Element {
