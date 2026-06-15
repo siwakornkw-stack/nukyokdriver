@@ -90,12 +90,16 @@ const SYNONYMS: Record<string, string[]> = {
   insuranceClass: ['ประกันชั้น', 'ชั้นประกัน'],
   insuranceCompany: ['ชื่อประกัน', 'บริษัทประกัน'],
   brokerName: ['โบรกเกอร์', 'ชื่อโบรกเกอร์', 'broker', 'brokername'],
-  premium: ['ค่าเบี้ย', 'เบี้ยประกัน', 'ค่าเบี้ยรวม', 'เบี้ยรวม', 'ค่าเบี้ยประกัน', 'totalpremium'],
+  premium: ['ค่าเบี้ย', 'เบี้ยประกัน', 'ค่าเบี้ยรวม', 'เบี้ยรวม', 'ค่าเบี้ยประกัน', 'เบี้ย', 'totalpremium'],
   compulsoryEnd: ['พรบยาว', 'พรบ', 'พรบหมด', 'พ.ร.บ.'],
   // Must precede taxEnd: "เลขที่ใบกำกับภาษี" contains "ภาษี" and would otherwise
   // be captured as taxEnd. The tax-invoice number is the natural key that tells
   // two same-day fuel fills apart, so it feeds the fuel dedup key.
   taxInvoiceNumber: ['เลขที่ใบกำกับภาษี', 'ใบกำกับภาษี', 'เลขที่ใบกำกับ', 'เลขใบกำกับ'],
+  // Repair line cost. Must precede taxEnd: a "ราคารวมภาษี7%" total contains "ภาษี"
+  // and would otherwise be captured as taxEnd, leaving CompanyPay = 0. A bare "ราคา"
+  // header (exact) is the other ตาราง MA cost layout.
+  companyPay: ['บริษัทจ่าย', 'บริษัทออก', '^ราคา', 'ราคารวมภาษี'],
   taxEnd: ['ภาษีสั้น', 'ภาษี', 'ภาษีหมด'],
   // odometer columns: matched before origin/destination so "เลขไมล์(ต้นทาง)/
   // (ปลายทาง)" map to odometer instead of being mistaken for job origin/destination.
@@ -111,8 +115,6 @@ const SYNONYMS: Record<string, string[]> = {
   repairShop: ['อู่', 'ร้านซ่อม', 'อู่ซ่อม', 'ชื่ออู่', 'ผู้ซ่อม', 'ช่างซ่อม'],
   receiveDate: ['วันรับรถ', 'วันที่รับรถ', 'รับรถ'],
   insurancePay: ['ประกันจ่าย', 'ประกันออก'],
-  // ตาราง MA repair sheets put the line cost under a bare ราคา header.
-  companyPay: ['บริษัทจ่าย', 'บริษัทออก', '^ราคา'],
   accidentDate: ['วันที่เกิดเหตุ', 'วันเกิดเหตุ'],
   accidentTime: ['เวลาเกิดเหตุ'],
   party: ['คู่กรณี', 'จำนวนคู่กรณี'],
@@ -331,7 +333,7 @@ function collectSubRecords(vehicleId: string, row: any[], colMap: Record<string,
   const broker = str(cell(row, colMap, 'brokerName'))
   const premium = decOrZero(cell(row, colMap, 'premium'))
 
-  const insEnd = dateOrNull(cell(row, colMap, 'insuranceEnd'))
+  const insEnd = dmyFirst(cell(row, colMap, 'insuranceEnd'))
   if (insEnd) {
     const k = `${vehicleId}|${insEnd.getTime()}`
     if (!b.insSet.has(k)) {
@@ -342,7 +344,7 @@ function collectSubRecords(vehicleId: string, row: any[], colMap: Record<string,
     }
   }
 
-  const compEnd = dateOrNull(cell(row, colMap, 'compulsoryEnd'))
+  const compEnd = dmyFirst(cell(row, colMap, 'compulsoryEnd'))
   if (compEnd) {
     const k = `${vehicleId}|${compEnd.getTime()}`
     if (!b.compSet.has(k)) {
@@ -352,7 +354,7 @@ function collectSubRecords(vehicleId: string, row: any[], colMap: Record<string,
     }
   }
 
-  const taxEnd = dateOrNull(cell(row, colMap, 'taxEnd'))
+  const taxEnd = dmyFirst(cell(row, colMap, 'taxEnd'))
   if (taxEnd) {
     const k = `${vehicleId}|${taxEnd.getTime()}`
     if (!b.taxSet.has(k)) {
@@ -420,7 +422,7 @@ async function importVehicles(tenantId: string, username: string | undefined, ro
       const brandId = await ensureRef('vehicleBrand', 'VehicleBrandId', tenantId, str(cell(row, colMap, 'brand')), brandMap, username)
       const driverId = await ensureRef('vehicleDriver', 'VehicleDriverId', tenantId, str(cell(row, colMap, 'driver')), driverMap, username)
       const statusId = await ensureRef('vehicleStatus', 'VehicleStatusId', tenantId, str(cell(row, colMap, 'status')), statusMap, username)
-      const regDate = dateOrNull(cell(row, colMap, 'registrationDate'))
+      const regDate = dmyFirst(cell(row, colMap, 'registrationDate'))
       const note = str(cell(row, colMap, 'note'))
       const instAmount = str(cell(row, colMap, 'installmentAmount'))
       const instDec = instAmount && /\d/.test(instAmount) ? new Prisma.Decimal(instAmount.replace(/[^0-9.]/g, '') || '0') : null
@@ -708,6 +710,16 @@ const dmyOrNull = (v: any): Date | null => {
   return adjustBE(d)
 }
 
+// Parse a date cell, trying strict DD/MM FIRST so hand-typed slash dates whose day
+// is <= 12 (e.g. "12/5/2569") aren't M/D-swapped by dateOrNull's new Date() fallback.
+// Excel serials / ISO fall through to dateOrNull. Resolves 2-digit BE years
+// (windowed to 19yy) as short BE: 19yy + 57 = CE.
+const dmyFirst = (v: any): Date | null => {
+  let d = dmyOrNull(v) ?? dateOrNull(v)
+  if (d) { const y = d.getFullYear(); if (y >= 1950 && y <= 1999) { d = new Date(d.getTime()); d.setFullYear(y + 57) } }
+  return d
+}
+
 function importRepair(tenantId: string, username: string | undefined, sheetName: string, rows: any[][], colMap: Record<string, number>): Promise<CatResult> {
   // ตาราง MA workbooks: one vehicle per sheet, columns ลำดับ|วันที่|รายละเอียด|
   // ผู้ซ่อม|จำนวน|ราคา. Line items of one visit leave วันที่ blank on continuation
@@ -726,7 +738,7 @@ function importRepair(tenantId: string, username: string | undefined, sheetName:
       if (!desc) return null
       if (/ยอดรวม/.test(`${str(cell(row, colMap, 'scheduledAt'))} ${desc}`)) return null
     }
-    let d = dateOrNull(cell(row, colMap, 'repairDate')) ?? dateOrNull(cell(row, colMap, 'receiveDate'))
+    let d = dmyFirst(cell(row, colMap, 'repairDate')) ?? dmyFirst(cell(row, colMap, 'receiveDate'))
     if (!d && 'scheduledAt' in colMap) {
       const raw = cell(row, colMap, 'scheduledAt')
       // dmyOrNull FIRST: JS new Date("6/5/68") parses M/D/Y successfully, so
@@ -770,7 +782,7 @@ function importRepair(tenantId: string, username: string | undefined, sheetName:
 }
 function importAccident(tenantId: string, username: string | undefined, sheetName: string, rows: any[][], colMap: Record<string, number>): Promise<CatResult> {
   return importCategory<Prisma.AccidentVehicleCreateManyInput>(tenantId, username, sheetName, rows, colMap, (row, vid) => {
-    const d = dateOrNull(cell(row, colMap, 'accidentDate')) ?? dateOrNull(cell(row, colMap, 'scheduledAt'))
+    const d = dmyFirst(cell(row, colMap, 'accidentDate')) ?? dmyFirst(cell(row, colMap, 'scheduledAt'))
     if (!d) return null
     return { VehicleId: vid, Status: 'active', Date: d, Time: str(cell(row, colMap, 'accidentTime')), Party: str(cell(row, colMap, 'party')), LicensePlate: str(cell(row, colMap, 'license')), DriverName: str(cell(row, colMap, 'driver')), Opponent: str(cell(row, colMap, 'opponent')), CreatedByUsername: username ?? 'import' }
   }, (data) => db.accidentVehicle.createMany({ data }), {
@@ -780,7 +792,8 @@ function importAccident(tenantId: string, username: string | undefined, sheetNam
 }
 function importFuel(tenantId: string, username: string | undefined, sheetName: string, rows: any[][], colMap: Record<string, number>): Promise<CatResult> {
   return importCategory<Prisma.GasolineCostCreateManyInput>(tenantId, username, sheetName, rows, colMap, (row, vid) => {
-    const d = dateOrNull(cell(row, colMap, 'fuelDate')) ?? dateOrNull(cell(row, colMap, 'scheduledAt'))
+    // dmyFirst: hand-typed "12/5/2569" must not be M/D-swapped into the wrong month.
+    const d = dmyFirst(cell(row, colMap, 'fuelDate')) ?? dmyFirst(cell(row, colMap, 'scheduledAt'))
     if (!d) return null
     return { VehicleId: vid, Status: 'active', Item: str(cell(row, colMap, 'fuelItem')), TaxInvoiceNumber: str(cell(row, colMap, 'taxInvoiceNumber')) || null, Liters: int0(cell(row, colMap, 'liters')), Amount: decOrZero(cell(row, colMap, 'amount')), OdometerStart: int0(cell(row, colMap, 'odometerStart')), OdometerEnd: int0(cell(row, colMap, 'odometerEnd')), DateTime: d, CreatedByUsername: username ?? 'import' }
   }, (data) => db.gasolineCost.createMany({ data }), {
@@ -790,9 +803,9 @@ function importFuel(tenantId: string, username: string | undefined, sheetName: s
 }
 function importOil(tenantId: string, username: string | undefined, sheetName: string, rows: any[][], colMap: Record<string, number>): Promise<CatResult> {
   return importCategory<Prisma.DrainTheOilVehicleCreateManyInput>(tenantId, username, sheetName, rows, colMap, (row, vid) => {
-    const d = dateOrNull(cell(row, colMap, 'oilDate')) ?? dateOrNull(cell(row, colMap, 'scheduledAt'))
+    const d = dmyFirst(cell(row, colMap, 'oilDate')) ?? dmyFirst(cell(row, colMap, 'scheduledAt'))
     if (!d) return null
-    return { VehicleId: vid, Status: 'active', Date: d, DueDate: dateOrNull(cell(row, colMap, 'oilDueDate')), Odometer: int0(cell(row, colMap, 'odometer')), TextAlert: str(cell(row, colMap, 'textAlert')) || str(cell(row, colMap, 'note')), CreatedByUsername: username ?? 'import' }
+    return { VehicleId: vid, Status: 'active', Date: d, DueDate: dmyFirst(cell(row, colMap, 'oilDueDate')), Odometer: int0(cell(row, colMap, 'odometer')), TextAlert: str(cell(row, colMap, 'textAlert')) || str(cell(row, colMap, 'note')), CreatedByUsername: username ?? 'import' }
   }, (data) => db.drainTheOilVehicle.createMany({ data }), {
     keyOf: (r) => `${r.VehicleId}|${kdate(r.Date)}|${r.Odometer}`,
     load: (vids) => db.drainTheOilVehicle.findMany({ where: { VehicleId: { in: vids } }, select: { VehicleId: true, Date: true, Odometer: true } }),
@@ -800,9 +813,9 @@ function importOil(tenantId: string, username: string | undefined, sheetName: st
 }
 function importInstallment(tenantId: string, username: string | undefined, sheetName: string, rows: any[][], colMap: Record<string, number>): Promise<CatResult> {
   return importCategory<Prisma.InstallmentsVehicleCreateManyInput>(tenantId, username, sheetName, rows, colMap, (row, vid) => {
-    const d = dateOrNull(cell(row, colMap, 'dueDate')) ?? dateOrNull(cell(row, colMap, 'scheduledAt'))
+    const d = dmyFirst(cell(row, colMap, 'dueDate')) ?? dmyFirst(cell(row, colMap, 'scheduledAt'))
     if (!d) return null
-    return { VehicleId: vid, Status: 'active', InstallmentNumber: int0(cell(row, colMap, 'installmentNumber')), DueDate: d, Amount: decOrZero(cell(row, colMap, 'amount')) , DatePay: dateOrNull(cell(row, colMap, 'datePay')), CreatedByUsername: username ?? 'import' }
+    return { VehicleId: vid, Status: 'active', InstallmentNumber: int0(cell(row, colMap, 'installmentNumber')), DueDate: d, Amount: decOrZero(cell(row, colMap, 'amount')) , DatePay: dmyFirst(cell(row, colMap, 'datePay')), CreatedByUsername: username ?? 'import' }
   }, (data) => db.installmentsVehicle.createMany({ data }), {
     keyOf: (r) => `${r.VehicleId}|${r.InstallmentNumber}|${kdate(r.DueDate)}|${kdec(r.Amount)}`,
     load: (vids) => db.installmentsVehicle.findMany({ where: { VehicleId: { in: vids } }, select: { VehicleId: true, InstallmentNumber: true, DueDate: true, Amount: true } }),
@@ -832,11 +845,11 @@ function importIncome(tenantId: string, username: string | undefined, sheetName:
     // The daily-summary date column holds only a day-of-month and its header
     // varies ("วันที่" vs " วัน"), so the first column is the reliable source for
     // the day. A real serial date (old English export) is still honoured first.
-    const d = dateOrNull(cell(row, colMap, 'scheduledAt'))
-      ?? dateOrNull(cell(row, colMap, 'receiveDate'))
+    const d = dmyFirst(cell(row, colMap, 'scheduledAt'))
+      ?? dmyFirst(cell(row, colMap, 'receiveDate'))
       ?? dateFromDay(int0(row[0]))
       ?? new Date()
-    return { VehicleId: vid, TenantId: tenantId, SourceLabel: label, Status: 'active', Description: str(cell(row, colMap, 'incomeDescription')) || str(cell(row, colMap, 'note')), CustomerName: str(cell(row, colMap, 'customerName')) || null, DateTime: d, ReceiveDate: dateOrNull(cell(row, colMap, 'receiveDate')), Time: str(cell(row, colMap, 'accidentTime')), WorkOrderNumber: str(cell(row, colMap, 'workOrderNumber')), InvoiceNumber: str(cell(row, colMap, 'invoiceNumber')), AmountReceive: amount, CreatedByUsername: username ?? 'import' }
+    return { VehicleId: vid, TenantId: tenantId, SourceLabel: label, Status: 'active', Description: str(cell(row, colMap, 'incomeDescription')) || str(cell(row, colMap, 'note')), CustomerName: str(cell(row, colMap, 'customerName')) || null, DateTime: d, ReceiveDate: dmyFirst(cell(row, colMap, 'receiveDate')), Time: str(cell(row, colMap, 'accidentTime')), WorkOrderNumber: str(cell(row, colMap, 'workOrderNumber')), InvoiceNumber: str(cell(row, colMap, 'invoiceNumber')), AmountReceive: amount, CreatedByUsername: username ?? 'import' }
   }
   return importCategory<Prisma.IncomeVehicleCreateManyInput>(tenantId, username, sheetName, rows, colMap,
     (row, vid) => mk(row, vid, null),
@@ -913,12 +926,16 @@ async function importInstallmentMatrix(tenantId: string, username: string | unde
 
   const existingInst = await db.installmentsVehicle.findMany({
     where: { Vehicle: { TenantId: tenantId } },
-    select: { VehicleId: true, InstallmentNumber: true },
+    select: { InstallmentsVehicleId: true, VehicleId: true, InstallmentNumber: true, DatePay: true },
   })
-  const existSet = new Set<string>(existingInst.map((i) => `${i.VehicleId}|${i.InstallmentNumber}`))
+  // key (VehicleId|InstallmentNumber) -> existing row id + whether already settled (DatePay set)
+  const existMap = new Map<string, { id: string; paid: boolean }>()
+  for (const i of existingInst) existMap.set(`${i.VehicleId}|${i.InstallmentNumber}`, { id: i.InstallmentsVehicleId, paid: i.DatePay != null })
   const seenSet = new Set<string>()
 
   const toCreate: Prisma.InstallmentsVehicleCreateManyInput[] = []
+  // existing UNPAID งวด that this file reports as paid -> settle them (set DatePay)
+  const toUpdate: { id: string; datePay: Date; evidence: string }[] = []
   let skipped = 0
   const errors: string[] = []
   const dataRows = matrix.slice(layout.groupRow + 1)
@@ -928,15 +945,16 @@ async function importInstallmentMatrix(tenantId: string, username: string | unde
     const rawLicense = str(row[layout.licenseCol] ?? '')
     if (!rawLicense || norm(rawLicense) === 'ทะเบียน') { skipped++; continue }
 
-    // Collect paid month-groups where วันที่ชำระ parses as a date
-    const payments: { date: Date; instNum: number; instRaw: string; invNo: string }[] = []
+    // Collect paid month-groups where วันที่ชำระ parses as a date (dmyFirst so a
+    // hand-typed "06/01/26" isn't M/D-swapped into the wrong DueDate month).
+    const payments: { date: Date; instNum: number; instTotal: number; instRaw: string; invNo: string }[] = []
     for (const grp of layout.monthGroups) {
-      const d = dateOrNull(row[grp.date])
+      const d = dmyFirst(row[grp.date])
       if (!d) continue
       const instRaw = str(row[grp.inst])
-      const m = instRaw.match(/งวดที่\s*(\d+)/)
+      const m = instRaw.match(/งวดที่\s*(\d+)(?:\s*\/\s*(\d+))?/)
       if (!m) { if (instRaw) errors.push(`แถว ${i + 1}: งวดที่ parse fail: "${instRaw}"`); continue }
-      payments.push({ date: d, instNum: parseInt(m[1], 10), instRaw, invNo: str(row[grp.invNo]) })
+      payments.push({ date: d, instNum: parseInt(m[1], 10), instTotal: m[2] ? parseInt(m[2], 10) : 0, instRaw, invNo: str(row[grp.invNo]) })
     }
     if (payments.length === 0) { skipped++; continue }
 
@@ -968,19 +986,63 @@ async function importInstallmentMatrix(tenantId: string, username: string | unde
     const amount = decOrZero(row[layout.amountCol] ?? '')
     for (const p of payments) {
       const k = `${vid}|${p.instNum}`
-      if (existSet.has(k) || seenSet.has(k)) { skipped++; continue }
+      if (seenSet.has(k)) { skipped++; continue }
       seenSet.add(k)
+      const evidence = p.invNo ? `${p.instRaw} ใบกำกับ ${p.invNo}` : p.instRaw
+      const ex = existMap.get(k)
+      if (ex) {
+        // already in DB: settle it if still unpaid (clears the pending งวด in the AR
+        // view), else leave alone so re-imports stay idempotent. Keep the existing
+        // DueDate/Amount (the loan schedule) — only stamp the actual payment.
+        if (ex.paid) { skipped++; continue }
+        toUpdate.push({ id: ex.id, datePay: p.date, evidence })
+        continue
+      }
       toCreate.push({
         VehicleId: vid, Status: 'active',
         InstallmentNumber: p.instNum, DueDate: p.date, DatePay: p.date, Amount: amount,
-        PaymentEvidence: p.invNo ? `${p.instRaw} ใบกำกับ ${p.invNo}` : p.instRaw,
+        PaymentEvidence: evidence,
         CreatedByUsername: username ?? 'import',
       })
+    }
+
+    // Generate the remaining UNPAID schedule (งวด lastInst+1 .. N) so the AR view
+    // shows real upcoming/overdue dues. The matrix lists PAID months only; the loan
+    // total N comes from "งวดที่X/N". DatePay=null marks them unpaid; due day follows
+    // the last paid row, one month apart.
+    const lastPaid = payments.reduce((a, b) => (b.instNum > a.instNum ? b : a))
+    const total = Math.max(...payments.map((p) => p.instTotal))
+    if (total > lastPaid.instNum && total - lastPaid.instNum <= 120 && amount.toNumber() > 0) {
+      for (let k = lastPaid.instNum + 1; k <= total; k++) {
+        const key = `${vid}|${k}`
+        if (existMap.has(key) || seenSet.has(key)) continue
+        seenSet.add(key)
+        // เลื่อนเดือนแบบกัน day-overflow: ถ้าวันจ่ายล่าสุดเป็น 29-31 setMonth ปกติจะล้น
+        // ข้ามเดือน — clamp วันให้ไม่เกินวันสุดท้ายของเดือนเป้าหมาย
+        const base = lastPaid.date
+        const tm = base.getUTCMonth() + (k - lastPaid.instNum)
+        const ty = base.getUTCFullYear() + Math.floor(tm / 12)
+        const tmo = ((tm % 12) + 12) % 12
+        const lastDayOfMonth = new Date(Date.UTC(ty, tmo + 1, 0)).getUTCDate()
+        const due = new Date(Date.UTC(ty, tmo, Math.min(base.getUTCDate(), lastDayOfMonth)))
+        toCreate.push({
+          VehicleId: vid, Status: 'active',
+          InstallmentNumber: k, DueDate: due, DatePay: null, Amount: amount,
+          PaymentEvidence: null,
+          CreatedByUsername: username ?? 'import',
+        })
+      }
     }
   }
 
   if (toCreate.length) await db.installmentsVehicle.createMany({ data: toCreate })
-  return { created: toCreate.length, updated: 0, sub: 0, skipped, errors }
+  if (toUpdate.length) await runChunked(toUpdate, 10, async (u) => {
+    await db.installmentsVehicle.update({
+      where: { InstallmentsVehicleId: u.id },
+      data: { DatePay: u.datePay, PaymentEvidence: u.evidence, UpdatedByUsername: username ?? 'import' },
+    })
+  })
+  return { created: toCreate.length, updated: toUpdate.length, sub: 0, skipped, errors }
 }
 
 const CATEGORY_IMPORTERS: Record<string, (t: string, u: string | undefined, sheet: string, r: any[][], c: Record<string, number>) => Promise<CatResult>> = {
@@ -1007,6 +1069,23 @@ async function resolveMapping(sheetName: string, matrix: any[][]): Promise<{ typ
   // the wide month-matrix layout that no general header heuristic can classify.
   const matrixLayout = detectInstallmentMatrix(matrix)
   if (matrixLayout) return { type: 'installment-matrix', headerRow: matrixLayout.groupRow, colMap: {}, via: 'heuristic' }
+
+  // Heuristic-first: when the curated Thai header synonyms confidently classify the
+  // sheet (a known type + >=2 mapped columns), skip the AI entirely. The heuristic is
+  // deterministic and already wins on conflicts; an AI call per sheet is what makes
+  // large multi-sheet workbooks (e.g. ตาราง MA = 30+ sheets) time out on serverless and
+  // import only partway. AI stays as the fallback for sheets the heuristic can't read.
+  const detFirst = detectHeader(matrix)
+  if (detFirst && Object.keys(detFirst.colMap).length >= 2) {
+    const detType = classify(detFirst.colMap)
+    // Guard: a sheet carrying insurance/tax/พรบ columns must be 'vehicles'. If the
+    // heuristic confidently classifies it as anything else, don't short-circuit —
+    // fall through to AI + the A2/A3 insurance guards (preserves the old behaviour).
+    const hasInsCols = ['insuranceEnd', 'compulsoryEnd', 'taxEnd'].some((k) => k in detFirst.colMap)
+    if (detType !== 'unknown' && !(hasInsCols && detType !== 'vehicles')) {
+      return { type: detType, headerRow: detFirst.headerRow, colMap: detFirst.colMap, via: 'heuristic' }
+    }
+  }
 
   const ai = await aiMapSheet(sheetName, matrix)
   if (ai && ai.type !== 'unknown' && Object.keys(ai.columns).length >= 1) {
@@ -1149,16 +1228,20 @@ export async function importWorkbook(tenantId: string, username: string | undefi
     }
   }
 
-  // Persist one reconcile log per import (income sheets only). Lets the history
-  // page show file vs DB totals and how much was cut as dup/already-present.
-  const incomeStats = results.filter((r) => r.stats)
-  if (incomeStats.length) {
-    const agg = incomeStats.reduce((s, r) => {
-      const t = r.stats as ImportStats
-      s.fileRows += t.fileRows; s.fileSum += t.fileSum
-      s.createdRows += r.created; s.createdSum += t.createdSum
-      s.dupRows += t.dupRows; s.dupSum += t.dupSum
-      s.existRows += t.existRows; s.existSum += t.existSum
+  // Persist one reconcile log per import (ALL sheet types, not just income). Money
+  // columns come from income stats only; other types contribute row counts so the
+  // history page confirms installment/insurance/repair imports too.
+  const processed = results.some((r) => r.created > 0 || r.updated > 0 || r.sub > 0 || r.skipped > 0 || r.stats)
+  if (processed) {
+    const agg = results.reduce((s, r) => {
+      const t = r.stats as ImportStats | undefined
+      s.createdRows += r.created
+      s.fileRows += t ? t.fileRows : r.created + r.skipped
+      if (t) {
+        s.fileSum += t.fileSum; s.createdSum += t.createdSum
+        s.dupRows += t.dupRows; s.dupSum += t.dupSum
+        s.existRows += t.existRows; s.existSum += t.existSum
+      }
       return s
     }, { fileRows: 0, fileSum: 0, createdRows: 0, createdSum: 0, dupRows: 0, dupSum: 0, existRows: 0, existSum: 0 })
     await db.importLog.create({
