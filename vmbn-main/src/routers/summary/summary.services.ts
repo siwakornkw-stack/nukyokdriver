@@ -315,6 +315,60 @@ export async function getExpenseSummaryService(
   }
 }
 
+// ---- per-transaction cost detail (repair / installment / insurance / tax+พรบ) ----
+// Mirrors the date filters of getExpenseSummaryService so each list sums to the
+// matching summary card (repair=RepairDate/CompanyPay, insurance/tax/พรบ=EndDate/
+// TotalPremium, installment=DatePay/Amount paid-only).
+export interface RepairDetailRow { id: string; vehicleId: string; licensePlate: string; vehicleType: string; date: string; description: string; repairShop: string; insurancePay: number; companyPay: number }
+export interface InstallmentDetailRow { id: string; vehicleId: string; licensePlate: string; vehicleType: string; datePay: string; dueDate: string; installmentNumber: number; amount: number; paymentEvidence: string }
+export interface InsuranceDetailRow { id: string; vehicleId: string; licensePlate: string; vehicleType: string; endDate: string; insuranceCompany: string; type: string; premium: number }
+export interface TaxDetailRow { id: string; vehicleId: string; licensePlate: string; vehicleType: string; kind: string; endDate: string; insuranceCompany: string; premium: number }
+export interface CostDetailResponse { repair: RepairDetailRow[]; installment: InstallmentDetailRow[]; insurance: InsuranceDetailRow[]; taxCompulsory: TaxDetailRow[] }
+
+const plateOf = (v: { LicensePlatePrefix: string; LicensePlateSuffix: string; LicensePlateProvince: string; Model: string; No: number }): string =>
+  [v.LicensePlatePrefix, v.LicensePlateSuffix, v.LicensePlateProvince].filter(Boolean).join(' ').trim() || v.Model || `รถ ${v.No}`
+const isoDay = (d: Date | null): string => (d ? d.toISOString().split('T')[0] : '')
+
+export async function getCostDetailService(
+  tenantId: string,
+  startDate?: string,
+  endDate?: string
+): Promise<CostDetailResponse> {
+  try {
+    const ofTenant = { Vehicle: { TenantId: tenantId } }
+    const vehInc = { include: { VehicleType: true } }
+    const [repairs, installments, insurances, taxes, compulsories] = await Promise.all([
+      prisma.repairVehicle.findMany({ where: { ...dateRange('RepairDate', startDate, endDate), ...ofTenant }, include: { Vehicle: vehInc }, orderBy: { RepairDate: 'desc' } }),
+      prisma.installmentsVehicle.findMany({ where: { ...((startDate && endDate) ? dateRange('DatePay', startDate, endDate) : { Status: 'active', DatePay: { not: null } }), ...ofTenant }, include: { Vehicle: vehInc }, orderBy: { DatePay: 'desc' } }),
+      prisma.insurancePolicyVehicle.findMany({ where: { ...dateRange('EndDate', startDate, endDate), ...ofTenant }, include: { Vehicle: vehInc }, orderBy: { EndDate: 'desc' } }),
+      prisma.tax.findMany({ where: { ...dateRange('EndDate', startDate, endDate), ...ofTenant }, include: { Vehicle: vehInc }, orderBy: { EndDate: 'desc' } }),
+      prisma.compulsoryMotorInsuranceVehicle.findMany({ where: { ...dateRange('EndDate', startDate, endDate), ...ofTenant }, include: { Vehicle: vehInc }, orderBy: { EndDate: 'desc' } }),
+    ])
+
+    const repair: RepairDetailRow[] = repairs.map((r) => ({
+      id: r.RepairVehicleId, vehicleId: r.VehicleId, licensePlate: plateOf(r.Vehicle), vehicleType: r.Vehicle.VehicleType?.Name || 'ไม่ระบุ',
+      date: isoDay(r.RepairDate), description: r.Description || '', repairShop: r.RepairShop || '', insurancePay: Number(r.InsurancePay), companyPay: Number(r.CompanyPay),
+    }))
+    const installment: InstallmentDetailRow[] = installments.map((r) => ({
+      id: r.InstallmentsVehicleId, vehicleId: r.VehicleId, licensePlate: plateOf(r.Vehicle), vehicleType: r.Vehicle.VehicleType?.Name || 'ไม่ระบุ',
+      datePay: isoDay(r.DatePay), dueDate: isoDay(r.DueDate), installmentNumber: r.InstallmentNumber, amount: Number(r.Amount), paymentEvidence: r.PaymentEvidence || '',
+    }))
+    const insurance: InsuranceDetailRow[] = insurances.map((r) => ({
+      id: r.InsurancePolicyVehicleId, vehicleId: r.VehicleId, licensePlate: plateOf(r.Vehicle), vehicleType: r.Vehicle.VehicleType?.Name || 'ไม่ระบุ',
+      endDate: isoDay(r.EndDate), insuranceCompany: r.InsuranceCompany || '', type: r.Type || '', premium: Number(r.TotalPremium),
+    }))
+    const taxCompulsory: TaxDetailRow[] = [
+      ...taxes.map((r) => ({ id: r.TaxId, vehicleId: r.VehicleId, licensePlate: plateOf(r.Vehicle), vehicleType: r.Vehicle.VehicleType?.Name || 'ไม่ระบุ', kind: 'ภาษี', endDate: isoDay(r.EndDate), insuranceCompany: r.InsuranceCompany || '', premium: Number(r.TotalPremium) })),
+      ...compulsories.map((r) => ({ id: r.CompulsoryMotorInsuranceVehicleId, vehicleId: r.VehicleId, licensePlate: plateOf(r.Vehicle), vehicleType: r.Vehicle.VehicleType?.Name || 'ไม่ระบุ', kind: 'พรบ', endDate: isoDay(r.EndDate), insuranceCompany: r.InsuranceCompany || '', premium: Number(r.TotalPremium) })),
+    ].sort((a, b) => b.endDate.localeCompare(a.endDate))
+
+    return { repair, installment, insurance, taxCompulsory }
+  } catch (error) {
+    console.error('Error in getCostDetailService:', error)
+    throw error
+  }
+}
+
 export async function getFuelSummaryService(
   tenantId: string,
   startDate?: string,

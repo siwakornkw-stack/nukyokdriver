@@ -27,12 +27,17 @@ import dayjs from 'dayjs';
 
 import { numberFormat } from '@/helpers/helper';
 import {
+  getCostDetail,
   getExpenseSummary,
   getFuelDetail,
   getIncomeSummary,
   type ExpenseSummaryRow,
   type FuelDetailRow,
   type IncomeSummaryRow,
+  type InstallmentDetailRow,
+  type InsuranceDetailRow,
+  type RepairDetailRow,
+  type TaxDetailRow,
 } from '../../../../services/report.service';
 
 const FUEL_HEADERS: { key: keyof FuelDetailRow; label: string; money?: boolean }[] = [
@@ -55,6 +60,40 @@ const INCOME_HEADERS: { key: keyof IncomeSummaryRow; label: string; money?: bool
   { key: 'totalIncome', label: 'รายได้รวม', money: true },
   { key: 'averageIncome', label: 'เฉลี่ย/เที่ยว', money: true },
   { key: 'lastTripDate', label: 'ล่าสุด' },
+];
+
+const REPAIR_HEADERS: { key: keyof RepairDetailRow; label: string; money?: boolean }[] = [
+  { key: 'date', label: 'วันที่' },
+  { key: 'licensePlate', label: 'ทะเบียน' },
+  { key: 'description', label: 'รายการซ่อม' },
+  { key: 'repairShop', label: 'อู่/ร้านซ่อม' },
+  { key: 'insurancePay', label: 'ประกันจ่าย', money: true },
+  { key: 'companyPay', label: 'บริษัทจ่าย', money: true },
+];
+
+const INSTALLMENT_HEADERS: { key: keyof InstallmentDetailRow; label: string; money?: boolean }[] = [
+  { key: 'datePay', label: 'วันที่จ่าย' },
+  { key: 'dueDate', label: 'ครบกำหนด' },
+  { key: 'licensePlate', label: 'ทะเบียน' },
+  { key: 'installmentNumber', label: 'งวดที่' },
+  { key: 'amount', label: 'จำนวนเงิน', money: true },
+  { key: 'paymentEvidence', label: 'หลักฐานการชำระ' },
+];
+
+const INSURANCE_HEADERS: { key: keyof InsuranceDetailRow; label: string; money?: boolean }[] = [
+  { key: 'endDate', label: 'หมดอายุ' },
+  { key: 'licensePlate', label: 'ทะเบียน' },
+  { key: 'type', label: 'ประเภท' },
+  { key: 'insuranceCompany', label: 'บริษัทประกัน' },
+  { key: 'premium', label: 'ค่าเบี้ย', money: true },
+];
+
+const TAX_HEADERS: { key: keyof TaxDetailRow; label: string; money?: boolean }[] = [
+  { key: 'kind', label: 'ประเภท' },
+  { key: 'endDate', label: 'หมดอายุ' },
+  { key: 'licensePlate', label: 'ทะเบียน' },
+  { key: 'insuranceCompany', label: 'หน่วยงาน/บริษัท' },
+  { key: 'premium', label: 'จำนวนเงิน', money: true },
 ];
 
 const EXPENSE_HEADERS: { key: keyof ExpenseSummaryRow; label: string; money?: boolean }[] = [
@@ -91,7 +130,7 @@ const MONTHS = ['มกราคม', 'กุมภาพันธ์', 'มี�
 const YEARS = Array.from({ length: 5 }, (_, i) => dayjs().year() - i);
 
 type SortDir = 'asc' | 'desc';
-type TabKey = 'expense' | 'fuel' | 'income';
+type TabKey = 'expense' | 'repair' | 'installment' | 'insurance' | 'tax' | 'fuel' | 'income';
 
 function sortRows<T>(rows: T[], key: keyof T | null, dir: SortDir): T[] {
   if (!key) return rows;
@@ -104,6 +143,57 @@ function sortRows<T>(rows: T[], key: keyof T | null, dir: SortDir): T[] {
         : String(av ?? '').localeCompare(String(bv ?? ''), 'th');
     return dir === 'asc' ? cmp : -cmp;
   });
+}
+
+// Generic sortable detail table — used by the flat per-transaction tabs
+// (ค่าซ่อม / ค่างวด / ประกันภัย / ภาษี+พรบ). Mirrors the fuel-detail table shape.
+function DetailTable<T extends { id: string | number }>({
+  headers, rows, sort, onSort, loading, minWidth,
+}: {
+  headers: { key: keyof T; label: string; money?: boolean }[];
+  rows: T[];
+  sort: { key: keyof T | null; dir: SortDir };
+  onSort: (key: keyof T) => void;
+  loading: boolean;
+  minWidth: number;
+}): React.JSX.Element {
+  return (
+    <Table sx={{ minWidth }}>
+      <TableHead>
+        <TableRow>
+          {headers.map((h) => (
+            <TableCell key={String(h.key)} align={h.money ? 'right' : 'left'} sortDirection={sort.key === h.key ? sort.dir : false}>
+              <TableSortLabel
+                active={sort.key === h.key}
+                direction={sort.key === h.key ? sort.dir : 'asc'}
+                onClick={() => onSort(h.key)}
+              >
+                {h.label}
+              </TableSortLabel>
+            </TableCell>
+          ))}
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {!loading && rows.length === 0 ? (
+          <TableRow>
+            <TableCell colSpan={headers.length} align="center" sx={{ color: 'text.secondary', py: 4 }}>
+              ไม่มีข้อมูลในช่วงวันที่ที่เลือก
+            </TableCell>
+          </TableRow>
+        ) : null}
+        {rows.map((r) => (
+          <TableRow hover key={String(r.id)}>
+            {headers.map((h) => (
+              <TableCell key={String(h.key)} align={h.money ? 'right' : 'left'}>
+                {h.money ? numberFormat(r[h.key] as number) : String(r[h.key] ?? '-')}
+              </TableCell>
+            ))}
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
 }
 
 function SummaryCard({ label, value, color }: { label: string; value: number; color?: string }): React.JSX.Element {
@@ -125,6 +215,10 @@ export default function PageReport(): React.JSX.Element {
   const [fuelSort, setFuelSort] = React.useState<{ key: keyof FuelDetailRow | null; dir: SortDir }>({ key: null, dir: 'asc' });
   const [incomeSort, setIncomeSort] = React.useState<{ key: keyof IncomeSummaryRow | null; dir: SortDir }>({ key: null, dir: 'asc' });
   const [expenseSort, setExpenseSort] = React.useState<{ key: keyof ExpenseSummaryRow | null; dir: SortDir }>({ key: 'totalCost', dir: 'desc' });
+  const [repairSort, setRepairSort] = React.useState<{ key: keyof RepairDetailRow | null; dir: SortDir }>({ key: 'date', dir: 'desc' });
+  const [installmentSort, setInstallmentSort] = React.useState<{ key: keyof InstallmentDetailRow | null; dir: SortDir }>({ key: 'datePay', dir: 'desc' });
+  const [insuranceSort, setInsuranceSort] = React.useState<{ key: keyof InsuranceDetailRow | null; dir: SortDir }>({ key: 'endDate', dir: 'desc' });
+  const [taxSort, setTaxSort] = React.useState<{ key: keyof TaxDetailRow | null; dir: SortDir }>({ key: 'endDate', dir: 'desc' });
 
   const { startDate, endDate } = React.useMemo<{ startDate: Date | null; endDate: Date | null }>(() => {
     if (year === 'all') return { startDate: null, endDate: null };
@@ -149,10 +243,19 @@ export default function PageReport(): React.JSX.Element {
     queryFn: () => getIncomeSummary(startDate, endDate),
     staleTime: 10000,
   });
+  const { data: costWrap, isLoading: costLoading } = useQuery({
+    queryKey: ['report-cost-detail', startDate, endDate],
+    queryFn: () => getCostDetail(startDate, endDate),
+    staleTime: 10000,
+  });
 
   const expenseRows: ExpenseSummaryRow[] = expenseWrap?.data?.data ?? [];
   const fuelRows: FuelDetailRow[] = fuelWrap?.data?.data ?? [];
   const incomeRows: IncomeSummaryRow[] = incomeWrap?.data?.data ?? [];
+  const repairRows: RepairDetailRow[] = costWrap?.data?.data?.repair ?? [];
+  const installmentRows: InstallmentDetailRow[] = costWrap?.data?.data?.installment ?? [];
+  const insuranceRows: InsuranceDetailRow[] = costWrap?.data?.data?.insurance ?? [];
+  const taxRows: TaxDetailRow[] = costWrap?.data?.data?.taxCompulsory ?? [];
 
   const vehicleOptions = React.useMemo(() => {
     const map = new Map<string, string>();
@@ -165,10 +268,18 @@ export default function PageReport(): React.JSX.Element {
   const filteredExpense = vehicle === 'all' ? expenseRows : expenseRows.filter((r) => r.vehicleId === vehicle);
   const filteredFuel = vehicle === 'all' ? fuelRows : fuelRows.filter((r) => r.vehicleId === vehicle);
   const filteredIncome = vehicle === 'all' ? incomeRows : incomeRows.filter((r) => r.vehicleId === vehicle);
+  const filteredRepair = vehicle === 'all' ? repairRows : repairRows.filter((r) => r.vehicleId === vehicle);
+  const filteredInstallment = vehicle === 'all' ? installmentRows : installmentRows.filter((r) => r.vehicleId === vehicle);
+  const filteredInsurance = vehicle === 'all' ? insuranceRows : insuranceRows.filter((r) => r.vehicleId === vehicle);
+  const filteredTax = vehicle === 'all' ? taxRows : taxRows.filter((r) => r.vehicleId === vehicle);
 
   const sortedExpense = React.useMemo(() => sortRows(filteredExpense, expenseSort.key, expenseSort.dir), [filteredExpense, expenseSort]);
   const sortedFuel = React.useMemo(() => sortRows(filteredFuel, fuelSort.key, fuelSort.dir), [filteredFuel, fuelSort]);
   const sortedIncome = React.useMemo(() => sortRows(filteredIncome, incomeSort.key, incomeSort.dir), [filteredIncome, incomeSort]);
+  const sortedRepair = React.useMemo(() => sortRows(filteredRepair, repairSort.key, repairSort.dir), [filteredRepair, repairSort]);
+  const sortedInstallment = React.useMemo(() => sortRows(filteredInstallment, installmentSort.key, installmentSort.dir), [filteredInstallment, installmentSort]);
+  const sortedInsurance = React.useMemo(() => sortRows(filteredInsurance, insuranceSort.key, insuranceSort.dir), [filteredInsurance, insuranceSort]);
+  const sortedTax = React.useMemo(() => sortRows(filteredTax, taxSort.key, taxSort.dir), [filteredTax, taxSort]);
 
   const handleExpenseSort = (key: keyof ExpenseSummaryRow): void =>
     setExpenseSort((p) => ({ key, dir: p.key === key && p.dir === 'asc' ? 'desc' : 'asc' }));
@@ -176,6 +287,14 @@ export default function PageReport(): React.JSX.Element {
     setFuelSort((p) => ({ key, dir: p.key === key && p.dir === 'asc' ? 'desc' : 'asc' }));
   const handleIncomeSort = (key: keyof IncomeSummaryRow): void =>
     setIncomeSort((p) => ({ key, dir: p.key === key && p.dir === 'asc' ? 'desc' : 'asc' }));
+  const handleRepairSort = (key: keyof RepairDetailRow): void =>
+    setRepairSort((p) => ({ key, dir: p.key === key && p.dir === 'asc' ? 'desc' : 'asc' }));
+  const handleInstallmentSort = (key: keyof InstallmentDetailRow): void =>
+    setInstallmentSort((p) => ({ key, dir: p.key === key && p.dir === 'asc' ? 'desc' : 'asc' }));
+  const handleInsuranceSort = (key: keyof InsuranceDetailRow): void =>
+    setInsuranceSort((p) => ({ key, dir: p.key === key && p.dir === 'asc' ? 'desc' : 'asc' }));
+  const handleTaxSort = (key: keyof TaxDetailRow): void =>
+    setTaxSort((p) => ({ key, dir: p.key === key && p.dir === 'asc' ? 'desc' : 'asc' }));
 
   // ยอดรวมทุกหมวดดึงจาก expense endpoint แหล่งเดียว เพื่อให้ตัวเลขสอดคล้องกัน
   const totals = React.useMemo(() => {
@@ -206,25 +325,15 @@ export default function PageReport(): React.JSX.Element {
 
   const exportActive = (): void => {
     const range = startDate && endDate ? `${dayjs(startDate).format('YYYYMMDD')}-${dayjs(endDate).format('YYYYMMDD')}` : 'all';
-    if (tab === 'expense') {
-      downloadCsv(
-        `report-expense-${range}.csv`,
-        EXPENSE_HEADERS,
-        sortedExpense.map((r) => EXPENSE_HEADERS.map((h) => r[h.key] as string | number)),
-      );
-    } else if (tab === 'fuel') {
-      downloadCsv(
-        `report-fuel-${range}.csv`,
-        FUEL_HEADERS,
-        sortedFuel.map((r) => FUEL_HEADERS.map((h) => r[h.key] as string | number)),
-      );
-    } else {
-      downloadCsv(
-        `report-income-${range}.csv`,
-        INCOME_HEADERS,
-        sortedIncome.map((r) => INCOME_HEADERS.map((h) => r[h.key] as string | number)),
-      );
-    }
+    const dump = <T,>(name: string, headers: { key: keyof T; label: string }[], rows: T[]): void =>
+      downloadCsv(`report-${name}-${range}.csv`, headers, rows.map((r) => headers.map((h) => r[h.key] as string | number)));
+    if (tab === 'expense') dump('expense', EXPENSE_HEADERS, sortedExpense);
+    else if (tab === 'fuel') dump('fuel', FUEL_HEADERS, sortedFuel);
+    else if (tab === 'income') dump('income', INCOME_HEADERS, sortedIncome);
+    else if (tab === 'repair') dump('repair', REPAIR_HEADERS, sortedRepair);
+    else if (tab === 'installment') dump('installment', INSTALLMENT_HEADERS, sortedInstallment);
+    else if (tab === 'insurance') dump('insurance', INSURANCE_HEADERS, sortedInsurance);
+    else dump('tax', TAX_HEADERS, sortedTax);
   };
 
   return (
@@ -297,6 +406,10 @@ export default function PageReport(): React.JSX.Element {
         <Tabs value={tab} onChange={(_, v) => setTab(v as TabKey)} sx={{ px: 2 }} variant="scrollable" scrollButtons="auto">
           <Tab label="ต้นทุน/กำไร" value="expense" />
           <Tab label="ค่าน้ำมัน (รายการ)" value="fuel" />
+          <Tab label="ค่าซ่อม" value="repair" />
+          <Tab label="ค่างวด" value="installment" />
+          <Tab label="ประกันภัย" value="insurance" />
+          <Tab label="ภาษี + พรบ." value="tax" />
           <Tab label="รายได้" value="income" />
         </Tabs>
         <Divider />
@@ -391,7 +504,7 @@ export default function PageReport(): React.JSX.Element {
                 ))}
               </TableBody>
             </Table>
-          ) : (
+          ) : tab === 'income' ? (
             <Table sx={{ minWidth: 700 }}>
               <TableHead>
                 <TableRow>
@@ -425,6 +538,14 @@ export default function PageReport(): React.JSX.Element {
                 ))}
               </TableBody>
             </Table>
+          ) : tab === 'repair' ? (
+            <DetailTable headers={REPAIR_HEADERS} rows={sortedRepair} sort={repairSort} onSort={handleRepairSort} loading={costLoading} minWidth={820} />
+          ) : tab === 'installment' ? (
+            <DetailTable headers={INSTALLMENT_HEADERS} rows={sortedInstallment} sort={installmentSort} onSort={handleInstallmentSort} loading={costLoading} minWidth={820} />
+          ) : tab === 'insurance' ? (
+            <DetailTable headers={INSURANCE_HEADERS} rows={sortedInsurance} sort={insuranceSort} onSort={handleInsuranceSort} loading={costLoading} minWidth={720} />
+          ) : (
+            <DetailTable headers={TAX_HEADERS} rows={sortedTax} sort={taxSort} onSort={handleTaxSort} loading={costLoading} minWidth={720} />
           )}
         </Box>
       </Card>

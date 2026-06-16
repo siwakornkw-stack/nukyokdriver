@@ -28,4 +28,10 @@ router.get(
     SummaryController.getExpenseSummary
 )
 
+router.get(
+    '/cost-detail',
+    requireUser,
+    SummaryController.getCostDetail
+)
+
 export default router 

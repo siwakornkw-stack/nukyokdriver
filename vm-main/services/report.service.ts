@@ -69,6 +69,59 @@ export interface ExpenseSummaryRow {
   profit: number;
 }
 
+export interface RepairDetailRow {
+  id: string;
+  vehicleId: string;
+  licensePlate: string;
+  vehicleType: string;
+  date: string;
+  description: string;
+  repairShop: string;
+  insurancePay: number;
+  companyPay: number;
+}
+
+export interface InstallmentDetailRow {
+  id: string;
+  vehicleId: string;
+  licensePlate: string;
+  vehicleType: string;
+  datePay: string;
+  dueDate: string;
+  installmentNumber: number;
+  amount: number;
+  paymentEvidence: string;
+}
+
+export interface InsuranceDetailRow {
+  id: string;
+  vehicleId: string;
+  licensePlate: string;
+  vehicleType: string;
+  endDate: string;
+  insuranceCompany: string;
+  type: string;
+  premium: number;
+}
+
+export interface TaxDetailRow {
+  id: string;
+  vehicleId: string;
+  licensePlate: string;
+  vehicleType: string;
+  kind: string;
+  endDate: string;
+  insuranceCompany: string;
+  premium: number;
+}
+
+export interface CostDetailResponse {
+  repair: RepairDetailRow[];
+  installment: InstallmentDetailRow[];
+  insurance: InsuranceDetailRow[];
+  taxCompulsory: TaxDetailRow[];
+}
+
 interface SummaryEnvelope<T> {
   success: boolean;
   code: number;
@@ -117,4 +170,8 @@ export function getFuelDetail(startDate: Date | null, endDate: Date | null): Pro
 
 export function getExpenseSummary(startDate: Date | null, endDate: Date | null): Promise<WrapResponse<SummaryEnvelope<ExpenseSummaryRow[]> | null>> {
   return fetchSummary<ExpenseSummaryRow[]>('/summary/expense', startDate, endDate);
+}
+
+export function getCostDetail(startDate: Date | null, endDate: Date | null): Promise<WrapResponse<SummaryEnvelope<CostDetailResponse> | null>> {
+  return fetchSummary<CostDetailResponse>('/summary/cost-detail', startDate, endDate);
 }
